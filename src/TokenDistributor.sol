@@ -26,6 +26,8 @@ contract TokenDistributor is Ownable {
     event TokenClaimed(uint256 indexed poolId, address user, uint256 amount);
     event TokenReclaimed(uint256 indexed poolId, uint256 amount);
 
+    constructor() Ownable(msg.sender) {}
+
     function create_pool(
         address _tokenAddress,
         uint256 _totalAmount,
