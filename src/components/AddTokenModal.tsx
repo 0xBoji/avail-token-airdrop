@@ -4,6 +4,8 @@ import { ethers } from 'ethers'
 import TokenDistributorABI from '../abi/TokenDistributor.json'
 
 const AVAIL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_AVAIL_TOKEN_ADDRESS || '0x421eEeF4f73c23B976a8AA82b5DD74999260adAc';
+const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0xafc80bf84f62A7ae5926Cb8949B373f663153d66';
+const RPC_URL = 'https://sepolia-rollup.arbitrum.io/rpc';
 
 interface AddTokenModalProps {
   isOpen: boolean;
@@ -27,14 +29,19 @@ export default function AddTokenModal({
     async function getPoolInfo() {
       if (poolId && isOpen) {
         try {
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          // Use JsonRpcProvider instead of Web3Provider
+          const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
           const contract = new ethers.Contract(
-            process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS!,
+            DISTRIBUTOR_ADDRESS,
             TokenDistributorABI,
             provider
           );
+
+          console.log('Getting pool info for pool:', poolId);
           const poolInfo = await contract.getPoolInfo(poolId);
           const required = ethers.utils.formatEther(poolInfo.totalAmount);
+          console.log('Required amount:', required);
+          
           setRequiredAmount(required);
           setAmount(required); // Set initial amount to required amount
         } catch (error) {
@@ -55,9 +62,25 @@ export default function AddTokenModal({
   };
 
   const handleSubmit = () => {
-    if (Number(amount) >= Number(requiredAmount)) {
+    if (!amount) {
+      setError('Amount is required');
+      return;
+    }
+
+    try {
+      // Parse amount to check if it's a valid number
+      const amountNum = ethers.utils.parseEther(amount);
+      const requiredNum = ethers.utils.parseEther(requiredAmount);
+
+      if (amountNum.lt(requiredNum)) {
+        setError(`Amount must be at least ${requiredAmount} AVAIL`);
+        return;
+      }
+
       onAddToken(amount);
       closeModal();
+    } catch (error) {
+      setError('Invalid amount format');
     }
   };
 

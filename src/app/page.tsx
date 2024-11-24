@@ -7,6 +7,7 @@ import TokenDistributorABI from '../abi/TokenDistributor.json';
 import AvailTokenABI from '../abi/AvailToken.json';
 import * as XLSX from 'xlsx';
 import AddTokenModal from '../components/AddTokenModal';
+import PoolList from '../components/PoolList';
 
 interface AddressAmount {
   address: string;
@@ -104,13 +105,42 @@ export default function Home() {
 
       // Convert addresses and amounts from the table
       const addressList = addressAmounts.map(item => item.address);
-      const amountList = addressAmounts.map(item => ethers.utils.parseEther(item.amount));
+      
+      // Convert amounts to BigNumber
+      const amountList = addressAmounts.map(item => {
+        try {
+          // Remove any commas, spaces, and validate the amount
+          const cleanAmount = item.amount.replace(/[,\s]/g, '');
+          if (!cleanAmount || isNaN(Number(cleanAmount))) {
+            throw new Error(`Invalid amount format for address ${item.address}`);
+          }
+          // Convert to wei using parseUnits
+          return ethers.utils.parseUnits(cleanAmount, 18).toString();
+        } catch (error) {
+          console.error('Error formatting amount:', error);
+          throw new Error(`Invalid amount format for address ${item.address}: ${item.amount}`);
+        }
+      });
 
       console.log('Adding addresses to pool:', selectedPoolId);
       console.log('Addresses:', addressList);
-      console.log('Amounts:', amountList);
+      console.log('Amounts (in wei):', amountList);
 
-      const tx = await contract.addAddressesToPool(selectedPoolId, addressList, amountList);
+      // Validate arrays are not empty
+      if (addressList.length === 0 || amountList.length === 0) {
+        throw new Error('No addresses or amounts to add');
+      }
+
+      // Validate arrays have same length
+      if (addressList.length !== amountList.length) {
+        throw new Error('Address and amount lists must have the same length');
+      }
+
+      // Convert amounts to BigNumber array for contract call
+      const amountsBN = amountList.map(amount => ethers.BigNumber.from(amount));
+
+      const tx = await contract.addAddressesToPool(selectedPoolId, addressList, amountsBN);
+      console.log('Transaction sent:', tx.hash);
       await tx.wait();
       console.log('Addresses added successfully');
 
@@ -127,38 +157,106 @@ export default function Home() {
   // Add Token to Pool
   async function addTokenToPool(amount: string) {
     try {
-      if (!DISTRIBUTOR_ADDRESS) {
+      if (!DISTRIBUTOR_ADDRESS || !AVAIL_TOKEN_ADDRESS) {
         throw new Error('Contract addresses not configured');
       }
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-      const contract = new ethers.Contract(
+      const userAddress = await signer.getAddress();
+
+      console.log('User address:', userAddress);
+      console.log('Token address:', AVAIL_TOKEN_ADDRESS);
+      console.log('Distributor address:', DISTRIBUTOR_ADDRESS);
+      console.log('Pool ID:', poolId);
+
+      // First check if addresses have been added to the pool
+      const distributorContract = new ethers.Contract(
         DISTRIBUTOR_ADDRESS,
         TokenDistributorABI,
         signer
       );
 
+      // Get pool info
+      const poolInfo = await distributorContract.getPoolInfo(poolId);
+      console.log('Pool info:', poolInfo);
+
+      if (poolInfo.totalAmount.eq(0)) {
+        throw new Error('Please add addresses to the pool first');
+      }
+
+      const requiredAmount = poolInfo.totalAmount;
+      console.log('Required amount:', ethers.utils.formatEther(requiredAmount));
+
+      // Convert amount to wei
       const amountInWei = ethers.utils.parseEther(amount);
+      console.log('Amount to add (in wei):', amountInWei.toString());
+
+      // Check if amount is sufficient
+      if (amountInWei.lt(requiredAmount)) {
+        throw new Error(`Insufficient amount. Required: ${ethers.utils.formatEther(requiredAmount)} AVAIL`);
+      }
+
+      // Check token balance
+      const tokenContract = new ethers.Contract(
+        AVAIL_TOKEN_ADDRESS,
+        [
+          'function balanceOf(address account) view returns (uint256)',
+          'function approve(address spender, uint256 amount) returns (bool)',
+          'function allowance(address owner, address spender) view returns (uint256)'
+        ],
+        signer
+      );
+
+      const balance = await tokenContract.balanceOf(userAddress);
+      console.log('User token balance:', ethers.utils.formatEther(balance));
+
+      if (balance.lt(amountInWei)) {
+        throw new Error(`Insufficient token balance. You have ${ethers.utils.formatEther(balance)} AVAIL`);
+      }
 
       // First approve the token transfer
-      const tokenContract = new ethers.Contract(AVAIL_TOKEN_ADDRESS, AvailTokenABI, signer);
       console.log('Approving tokens...');
       const approveTx = await tokenContract.approve(DISTRIBUTOR_ADDRESS, amountInWei);
+      console.log('Approval transaction sent:', approveTx.hash);
       await approveTx.wait();
       console.log('Tokens approved');
 
-      // Then add token to pool with amount
+      // Verify allowance after approval
+      const allowance = await tokenContract.allowance(userAddress, DISTRIBUTOR_ADDRESS);
+      console.log('Allowance after approval:', ethers.utils.formatEther(allowance));
+
+      if (allowance.lt(amountInWei)) {
+        throw new Error('Approval failed - allowance not set correctly');
+      }
+
+      // Add a small delay after approval
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Then add token to pool
       console.log('Adding token to pool...');
-      const tx = await contract.addTokenToPool(poolId, AVAIL_TOKEN_ADDRESS, amountInWei);
-      await tx.wait();
-      console.log('Token added to pool successfully');
+      const tx = await distributorContract.addTokenToPool(
+        poolId, 
+        AVAIL_TOKEN_ADDRESS, 
+        amountInWei,
+        {
+          gasLimit: 500000 // Increased gas limit
+        }
+      );
+      console.log('Transaction sent:', tx.hash);
+      const receipt = await tx.wait();
+      console.log('Token added to pool successfully, receipt:', receipt);
       
       setIsTokenAdded(true);
       setIsAddTokenModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding token to pool:', error);
-      alert('Failed to add token: ' + (error as Error).message);
+      // Show more detailed error message
+      if (error.data?.message) {
+        alert('Contract error: ' + error.data.message);
+      } else {
+        alert('Failed to add token: ' + (error.message || error.reason || 'Unknown error'));
+      }
     }
   }
 
@@ -177,16 +275,50 @@ export default function Home() {
         signer
       );
 
-      if (poolType === 'auto') {
-        const tx = await contract.distributeToAll(poolId);
-        await tx.wait();
-      } else {
-        const tx = await contract.claim(poolId);
-        await tx.wait();
+      // First check pool info
+      console.log('Checking pool info for pool:', poolId);
+      const poolInfo = await contract.getPoolInfo(poolId);
+      
+      if (!poolInfo.isTokenAdded) {
+        throw new Error('Token must be added to the pool before distribution');
       }
-    } catch (error) {
+
+      if (poolInfo.isDistributed) {
+        throw new Error('Pool has already been distributed');
+      }
+
+      // Add gas limit to the transaction
+      const options = {
+        gasLimit: 500000 // Increased gas limit
+      };
+
+      if (poolType === 'auto') {
+        console.log('Distributing tokens for pool:', poolId);
+        const tx = await contract.distributeToAll(poolId, options);
+        console.log('Distribution transaction sent:', tx.hash);
+        const receipt = await tx.wait();
+        console.log('Distribution successful:', receipt);
+        alert('Tokens distributed successfully!');
+      } else {
+        console.log('Claiming tokens for pool:', poolId);
+        const tx = await contract.claim(poolId, options);
+        console.log('Claim transaction sent:', tx.hash);
+        const receipt = await tx.wait();
+        console.log('Claim successful:', receipt);
+        alert('Tokens claimed successfully!');
+      }
+    } catch (error: any) {
       console.error('Error with distribution:', error);
-      alert('Failed to distribute tokens: ' + (error as Error).message);
+      // Show more user-friendly error message
+      if (error.data?.message) {
+        alert('Distribution failed: ' + error.data.message);
+      } else if (error.message.includes('Token not added')) {
+        alert('Please add token to the pool before distributing');
+      } else if (error.message.includes('Already distributed')) {
+        alert('Tokens have already been distributed for this pool');
+      } else {
+        alert('Failed to distribute tokens: ' + (error.message || 'Unknown error'));
+      }
     }
   }
 
@@ -209,11 +341,9 @@ export default function Home() {
         }));
 
         setAddressAmounts(formattedData);
-        // Also update the text areas for compatibility
-        setAddresses(formattedData.map(item => item.address).join('\n'));
-        setAmounts(formattedData.map(item => item.amount).join('\n'));
       } catch (error) {
         console.error('Error parsing Excel file:', error);
+        alert('Error parsing Excel file. Please check the format.');
       }
     };
     reader.readAsBinaryString(file);
@@ -545,6 +675,10 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          <div className="mt-8">
+            <PoolList />
+          </div>
         </div>
       </main>
 
