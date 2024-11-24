@@ -81,18 +81,22 @@ contract TokenDistributor is Ownable {
     // Step 3: Add token to pool
     function addTokenToPool(
         uint256 poolId,
-        address token
+        address token,
+        uint256 amount
     ) external onlyOwner {
         require(token != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than 0");
+        
         Pool storage pool = pools[poolId];
         require(!pool.isTokenAdded, "Token already added");
         require(pool.totalAmount > 0, "Add addresses first");
-
+        require(amount >= pool.totalAmount, "Amount must be >= total distribution amount");
+    
         pool.token = token;
         pool.isTokenAdded = true;
-
-        IERC20(token).transferFrom(msg.sender, address(this), pool.totalAmount);
-        emit TokenAddedToPool(poolId, token, pool.totalAmount);
+    
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        emit TokenAddedToPool(poolId, token, amount);
     }
 
     // Step 4 (Type 1): Admin distributes tokens to everyone
