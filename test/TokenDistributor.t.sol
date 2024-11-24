@@ -166,7 +166,7 @@ contract TokenDistributorTest is Test {
         distributor.addAddressesToPool(poolId, addresses, amounts);
 
         token.approve(address(distributor), amount);
-        distributor.addTokenToPool(poolId, address(token));
+        distributor.addTokenToPool(poolId, address(token), amount);
 
         (address poolToken,,,,,) = distributor.getPoolInfo(poolId);
         assertEq(poolToken, address(token));
@@ -190,7 +190,7 @@ contract TokenDistributorTest is Test {
         // Step 3: Add token
         uint256 amount = 1000 * 10**18;
         token.approve(address(distributor), amount);
-        distributor.addTokenToPool(poolId, address(token));
+        distributor.addTokenToPool(poolId, address(token), amount);
 
         // Step 4: Distribute
         distributor.distributeToAll(poolId);
@@ -217,7 +217,7 @@ contract TokenDistributorTest is Test {
         // Step 3: Add token
         uint256 amount = 1000 * 10**18;
         token.approve(address(distributor), amount);
-        distributor.addTokenToPool(poolId, address(token));
+        distributor.addTokenToPool(poolId, address(token), amount);
 
         // Step 4: Users claim
         vm.prank(user1);
@@ -268,7 +268,7 @@ contract TokenDistributorTest is Test {
         // Step 3: Add AVAIL token
         uint256 totalAmount = 600_000 * 10**18; // 600k AVAIL total
         availToken.approve(address(distributor), totalAmount);
-        distributor.addTokenToPool(poolId, address(availToken));
+        distributor.addTokenToPool(poolId, address(availToken), totalAmount);
 
         // Step 4: Distribute to all
         distributor.distributeToAll(poolId);
@@ -299,7 +299,7 @@ contract TokenDistributorTest is Test {
         // Step 3: Add AVAIL token
         uint256 totalAmount = 600_000 * 10**18; // 600k AVAIL total
         availToken.approve(address(distributor), totalAmount);
-        distributor.addTokenToPool(poolId, address(availToken));
+        distributor.addTokenToPool(poolId, address(availToken), totalAmount);
 
         // Step 4: Users claim their tokens
         vm.prank(address(0x1));
@@ -356,6 +356,60 @@ contract TokenDistributorTest is Test {
         for (uint i = 0; i < users.length; i++) {
             assertEq(autoParticipants[i], users[i]);
             assertEq(claimParticipants[i], users[i]);
+        }
+    }
+
+    function test_GetAllPoolIds() public {
+        // Create multiple pools
+        uint256 poolId1 = distributor.createAutoPool("Auto Pool 1");
+        uint256 poolId2 = distributor.createClaimPool("Claim Pool 1");
+        uint256 poolId3 = distributor.createAutoPool("Auto Pool 2");
+
+        // Get all pool IDs
+        uint256[] memory allPoolIds = distributor.getAllPoolIds();
+
+        // Verify the length
+        assertEq(allPoolIds.length, 3);
+
+        // Verify the IDs are correct and in order
+        assertEq(allPoolIds[0], poolId1);
+        assertEq(allPoolIds[1], poolId2);
+        assertEq(allPoolIds[2], poolId3);
+
+        // Create another pool and verify it's added to the list
+        uint256 poolId4 = distributor.createClaimPool("Claim Pool 2");
+        allPoolIds = distributor.getAllPoolIds();
+        
+        assertEq(allPoolIds.length, 4);
+        assertEq(allPoolIds[3], poolId4);
+    }
+
+    function test_GetAllPoolIdsEmpty() public {
+        // Get pool IDs when no pools exist
+        uint256[] memory allPoolIds = distributor.getAllPoolIds();
+        assertEq(allPoolIds.length, 0);
+    }
+
+    function test_GetAllPoolIdsWithInfo() public {
+        // Create pools with different types
+        uint256 autoPoolId = distributor.createAutoPool("Auto Pool");
+        uint256 claimPoolId = distributor.createClaimPool("Claim Pool");
+
+        // Get all pool IDs
+        uint256[] memory allPoolIds = distributor.getAllPoolIds();
+        assertEq(allPoolIds.length, 2);
+
+        // Verify pool info for each ID
+        for (uint i = 0; i < allPoolIds.length; i++) {
+            (,, string memory name,,, TokenDistributor.PoolType poolType) = distributor.getPoolInfo(allPoolIds[i]);
+            
+            if (allPoolIds[i] == autoPoolId) {
+                assertEq(name, "Auto Pool");
+                assertEq(uint(poolType), uint(TokenDistributor.PoolType.AUTO_TRANSFER));
+            } else if (allPoolIds[i] == claimPoolId) {
+                assertEq(name, "Claim Pool");
+                assertEq(uint(poolType), uint(TokenDistributor.PoolType.CLAIMABLE));
+            }
         }
     }
 } 

@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.19;
 
-import {Script} from "forge-std/Script.sol";
-import {TokenDistributor} from "../src/TokenDistributor.sol";
+import "forge-std/Script.sol";
+import "../src/TokenDistributor.sol";
+import "../src/AvailToken.sol";
 
-contract DeployTokenDistributor is Script {
-    function run() external returns (TokenDistributor) {
+contract DeployScript is Script {
+    function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        
         vm.startBroadcast(deployerPrivateKey);
-        
+
+        // Deploy AVAIL Token first
+        AvailToken token = new AvailToken();
+        console.log("AvailToken deployed to:", address(token));
+
+        // Deploy TokenDistributor
         TokenDistributor distributor = new TokenDistributor();
-        
+        console.log("TokenDistributor deployed to:", address(distributor));
+
         vm.stopBroadcast();
-        
-        return distributor;
     }
 } 

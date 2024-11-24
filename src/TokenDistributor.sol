@@ -21,6 +21,7 @@ contract TokenDistributor is Ownable {
 
     mapping(uint256 => Pool) public pools;
     uint256 public currentPoolId;
+    uint256[] private poolIds;
 
     event PoolCreated(uint256 indexed poolId, string name, PoolType poolType);
     event AddressesAdded(uint256 indexed poolId, uint256 totalAddresses);
@@ -37,6 +38,7 @@ contract TokenDistributor is Ownable {
         pool.name = name;
         pool.poolType = PoolType.AUTO_TRANSFER;
         
+        poolIds.push(poolId);
         emit PoolCreated(poolId, name, PoolType.AUTO_TRANSFER);
         return poolId;
     }
@@ -48,6 +50,7 @@ contract TokenDistributor is Ownable {
         pool.name = name;
         pool.poolType = PoolType.CLAIMABLE;
         
+        poolIds.push(poolId);
         emit PoolCreated(poolId, name, PoolType.CLAIMABLE);
         return poolId;
     }
@@ -167,5 +170,9 @@ contract TokenDistributor is Ownable {
 
     function hasUserClaimed(uint256 poolId, address user) external view returns (bool) {
         return pools[poolId].hasClaimed[user];
+    }
+
+    function getAllPoolIds() external view returns (uint256[] memory) {
+        return poolIds;
     }
 }
