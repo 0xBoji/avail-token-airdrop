@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract AvailToken is ERC20, Ownable {
     constructor() ERC20("AVAIL FAKE", "AVAIL") Ownable(msg.sender) {
-        // Mint 1 million tokens to the deployer
         _mint(msg.sender, 1_000_000 * 10**decimals());
     }
 

@@ -31,73 +31,24 @@ contract TokenDistributorTest is Test {
         availToken = new AvailToken();
     }
 
-    function test_CreatePool() public {
-        uint256 amount = 1000 * 10**18;
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
+    function test_CreateAutoPool() public {
+        uint256 poolId = distributor.createAutoPool("Test Auto Pool");
         
-        token.approve(address(distributor), amount);
-        
-        uint256 poolId = distributor.create_pool(
-            address(token),
-            amount,
-            "Test Pool",
-            startTime,
-            endTime
-        );
-
-        (address poolToken, uint256 poolAmount) = distributor.get_token_in_pool(poolId);
-        assertEq(poolToken, address(token));
-        assertEq(poolAmount, amount);
+        (,, string memory name,,, TokenDistributor.PoolType poolType) = distributor.getPoolInfo(poolId);
+        assertEq(name, "Test Auto Pool");
+        assertEq(uint(poolType), uint(TokenDistributor.PoolType.AUTO_TRANSFER));
     }
 
-    function test_CreatePoolNoToken() public {
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
+    function test_CreateClaimPool() public {
+        uint256 poolId = distributor.createClaimPool("Test Claim Pool");
         
-        uint256 poolId = distributor.create_pool_no_token(
-            "Test Pool No Token",
-            startTime,
-            endTime
-        );
-
-        (address poolToken, uint256 poolAmount) = distributor.get_token_in_pool(poolId);
-        assertEq(poolToken, address(0));
-        assertEq(poolAmount, 0);
-    }
-
-    function test_AddTokenToPool() public {
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        uint256 amount = 1000 * 10**18;
-        
-        uint256 poolId = distributor.create_pool_no_token(
-            "Test Pool",
-            startTime,
-            endTime
-        );
-
-        token.approve(address(distributor), amount);
-        distributor.add_token_to_pool(poolId, address(token), amount);
-
-        (address poolToken, uint256 poolAmount) = distributor.get_token_in_pool(poolId);
-        assertEq(poolToken, address(token));
-        assertEq(poolAmount, amount);
+        (,, string memory name,,, TokenDistributor.PoolType poolType) = distributor.getPoolInfo(poolId);
+        assertEq(name, "Test Claim Pool");
+        assertEq(uint(poolType), uint(TokenDistributor.PoolType.CLAIMABLE));
     }
 
     function test_AddAddressesToPool() public {
-        uint256 amount = 1000 * 10**18;
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        
-        token.approve(address(distributor), amount);
-        uint256 poolId = distributor.create_pool(
-            address(token),
-            amount,
-            "Test Pool",
-            startTime,
-            endTime
-        );
+        uint256 poolId = distributor.createAutoPool("Test Pool");
 
         address[] memory addresses = new address[](2);
         addresses[0] = user1;
@@ -107,104 +58,15 @@ contract TokenDistributorTest is Test {
         amounts[0] = 400 * 10**18;
         amounts[1] = 600 * 10**18;
 
-        distributor.add_address_amount_to_pool(poolId, addresses, amounts);
+        distributor.addAddressesToPool(poolId, addresses, amounts);
 
-        assertEq(distributor.get_token_claimable_by_pool(poolId, user1), 400 * 10**18);
-        assertEq(distributor.get_token_claimable_by_pool(poolId, user2), 600 * 10**18);
+        assertEq(distributor.getClaimableAmount(poolId, user1), 400 * 10**18);
+        assertEq(distributor.getClaimableAmount(poolId, user2), 600 * 10**18);
     }
 
-    function testFail_ClaimBeforeStartTime() public {
+    function test_AddTokenToPool() public {
+        uint256 poolId = distributor.createAutoPool("Test Pool");
         uint256 amount = 1000 * 10**18;
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        
-        token.approve(address(distributor), amount);
-        uint256 poolId = distributor.create_pool(
-            address(token),
-            amount,
-            "Test Pool",
-            startTime,
-            endTime
-        );
-
-        address[] memory addresses = new address[](1);
-        addresses[0] = user1;
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-
-        distributor.add_address_amount_to_pool(poolId, addresses, amounts);
-        
-        vm.prank(user1);
-        distributor.claim_token_by_pool(poolId); // Should fail
-    }
-
-    function test_ClaimToken() public {
-        uint256 amount = 1000 * 10**18;
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        
-        token.approve(address(distributor), amount);
-        uint256 poolId = distributor.create_pool(
-            address(token),
-            amount,
-            "Test Pool",
-            startTime,
-            endTime
-        );
-
-        address[] memory addresses = new address[](1);
-        addresses[0] = user1;
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-
-        distributor.add_address_amount_to_pool(poolId, addresses, amounts);
-        
-        // Warp to claim period
-        vm.warp(startTime + 1);
-        
-        vm.prank(user1);
-        distributor.claim_token_by_pool(poolId);
-        
-        assertEq(token.balanceOf(user1), amount);
-        assertEq(distributor.get_token_claimable_by_pool(poolId, user1), 0);
-    }
-
-    function test_ReclaimToken() public {
-        uint256 amount = 1000 * 10**18;
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        
-        token.approve(address(distributor), amount);
-        uint256 poolId = distributor.create_pool(
-            address(token),
-            amount,
-            "Test Pool",
-            startTime,
-            endTime
-        );
-
-        // Warp to after end time
-        vm.warp(endTime + 1);
-        
-        uint256 initialBalance = token.balanceOf(owner);
-        distributor.reclaim_pool_token(poolId);
-        
-        assertEq(token.balanceOf(owner), initialBalance + amount);
-    }
-
-    function test_GetAllAddressesInPool() public {
-        uint256 amount = 1000 * 10**18;
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        
-        token.approve(address(distributor), amount);
-        uint256 poolId = distributor.create_pool(
-            address(token),
-            amount,
-            "Test Pool",
-            startTime,
-            endTime
-        );
 
         address[] memory addresses = new address[](2);
         addresses[0] = user1;
@@ -214,58 +76,199 @@ contract TokenDistributorTest is Test {
         amounts[0] = 400 * 10**18;
         amounts[1] = 600 * 10**18;
 
-        distributor.add_address_amount_to_pool(poolId, addresses, amounts);
+        distributor.addAddressesToPool(poolId, addresses, amounts);
 
-        address[] memory poolAddresses = distributor.get_all_addresses_in_pool(poolId);
-        assertEq(poolAddresses.length, 2);
-        assertEq(poolAddresses[0], user1);
-        assertEq(poolAddresses[1], user2);
+        token.approve(address(distributor), amount);
+        distributor.addTokenToPool(poolId, address(token));
+
+        (address poolToken,,,,,) = distributor.getPoolInfo(poolId);
+        assertEq(poolToken, address(token));
     }
 
-    function testAvailTokenDistribution() public {
-        uint256 totalAmount = 1000 * 10**18; // 1000 AVAIL tokens
+    function test_AutoDistribution() public {
+        // Step 1: Create auto pool
+        uint256 poolId = distributor.createAutoPool("Auto Pool");
+
+        // Step 2: Add addresses
+        address[] memory users = new address[](2);
+        users[0] = user1;
+        users[1] = user2;
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 400 * 10**18;
+        amounts[1] = 600 * 10**18;
+
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add token
+        uint256 amount = 1000 * 10**18;
+        token.approve(address(distributor), amount);
+        distributor.addTokenToPool(poolId, address(token));
+
+        // Step 4: Distribute
+        distributor.distributeToAll(poolId);
+
+        assertEq(token.balanceOf(user1), 400 * 10**18);
+        assertEq(token.balanceOf(user2), 600 * 10**18);
+    }
+
+    function test_ClaimableDistribution() public {
+        // Step 1: Create claim pool
+        uint256 poolId = distributor.createClaimPool("Claim Pool");
+
+        // Step 2: Add addresses
+        address[] memory users = new address[](2);
+        users[0] = user1;
+        users[1] = user2;
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 400 * 10**18;
+        amounts[1] = 600 * 10**18;
+
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add token
+        uint256 amount = 1000 * 10**18;
+        token.approve(address(distributor), amount);
+        distributor.addTokenToPool(poolId, address(token));
+
+        // Step 4: Users claim
+        vm.prank(user1);
+        distributor.claim(poolId);
+        assertEq(token.balanceOf(user1), 400 * 10**18);
+
+        vm.prank(user2);
+        distributor.claim(poolId);
+        assertEq(token.balanceOf(user2), 600 * 10**18);
+    }
+
+    function test_GetParticipants() public {
+        uint256 poolId = distributor.createAutoPool("Test Pool");
+
+        address[] memory addresses = new address[](2);
+        addresses[0] = user1;
+        addresses[1] = user2;
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 400 * 10**18;
+        amounts[1] = 600 * 10**18;
+
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+
+        address[] memory participants = distributor.getParticipants(poolId);
+        assertEq(participants.length, 2);
+        assertEq(participants[0], user1);
+        assertEq(participants[1], user2);
+    }
+
+    function test_AvailTokenAutoDistribution() public {
+        // Step 1: Create auto-transfer pool
+        uint256 poolId = distributor.createAutoPool("AVAIL Auto Pool");
+
+        // Step 2: Add addresses and amounts
         address[] memory users = new address[](3);
-        uint256[] memory amounts = new uint256[](3);
-
         users[0] = address(0x1);
         users[1] = address(0x2);
         users[2] = address(0x3);
 
-        amounts[0] = 300 * 10**18;
-        amounts[1] = 400 * 10**18;
-        amounts[2] = 300 * 10**18;
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 100_000 * 10**18;  // 100k AVAIL
+        amounts[1] = 200_000 * 10**18;  // 200k AVAIL
+        amounts[2] = 300_000 * 10**18;  // 300k AVAIL
 
-        // Approve tokens for the distributor
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add AVAIL token
+        uint256 totalAmount = 600_000 * 10**18; // 600k AVAIL total
         availToken.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(availToken));
 
-        // Create pool with AVAIL token
-        uint256 startTime = block.timestamp + 1 days;
-        uint256 endTime = startTime + 7 days;
-        uint256 poolId = distributor.create_pool(
-            address(availToken),
-            totalAmount,
-            "AVAIL Distribution",
-            startTime,
-            endTime
-        );
+        // Step 4: Distribute to all
+        distributor.distributeToAll(poolId);
 
-        // Add addresses to the pool
-        distributor.add_address_amount_to_pool(poolId, users, amounts);
+        // Verify balances
+        assertEq(availToken.balanceOf(address(0x1)), 100_000 * 10**18);
+        assertEq(availToken.balanceOf(address(0x2)), 200_000 * 10**18);
+        assertEq(availToken.balanceOf(address(0x3)), 300_000 * 10**18);
+    }
 
-        // Warp to after start time to enable claiming
-        vm.warp(startTime + 1);
+    function test_AvailTokenClaimableDistribution() public {
+        // Step 1: Create claimable pool
+        uint256 poolId = distributor.createClaimPool("AVAIL Claim Pool");
 
-        // Test claiming
+        // Step 2: Add addresses and amounts
+        address[] memory users = new address[](3);
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        users[2] = address(0x3);
+
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 100_000 * 10**18;  // 100k AVAIL
+        amounts[1] = 200_000 * 10**18;  // 200k AVAIL
+        amounts[2] = 300_000 * 10**18;  // 300k AVAIL
+
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add AVAIL token
+        uint256 totalAmount = 600_000 * 10**18; // 600k AVAIL total
+        availToken.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(availToken));
+
+        // Step 4: Users claim their tokens
         vm.prank(address(0x1));
-        distributor.claim_token_by_pool(poolId);
-        assertEq(availToken.balanceOf(address(0x1)), 300 * 10**18);
+        distributor.claim(poolId);
+        assertEq(availToken.balanceOf(address(0x1)), 100_000 * 10**18);
 
         vm.prank(address(0x2));
-        distributor.claim_token_by_pool(poolId);
-        assertEq(availToken.balanceOf(address(0x2)), 400 * 10**18);
+        distributor.claim(poolId);
+        assertEq(availToken.balanceOf(address(0x2)), 200_000 * 10**18);
 
         vm.prank(address(0x3));
-        distributor.claim_token_by_pool(poolId);
-        assertEq(availToken.balanceOf(address(0x3)), 300 * 10**18);
+        distributor.claim(poolId);
+        assertEq(availToken.balanceOf(address(0x3)), 300_000 * 10**18);
+    }
+
+    function test_AvailTokenDistributionInfo() public {
+        // Create both types of pools
+        uint256 autoPoolId = distributor.createAutoPool("AVAIL Auto Pool");
+        uint256 claimPoolId = distributor.createClaimPool("AVAIL Claim Pool");
+
+        // Verify pool info
+        (,, string memory autoName,,, TokenDistributor.PoolType autoType) = distributor.getPoolInfo(autoPoolId);
+        (,, string memory claimName,,, TokenDistributor.PoolType claimType) = distributor.getPoolInfo(claimPoolId);
+
+        assertEq(autoName, "AVAIL Auto Pool");
+        assertEq(claimName, "AVAIL Claim Pool");
+        assertEq(uint(autoType), uint(TokenDistributor.PoolType.AUTO_TRANSFER));
+        assertEq(uint(claimType), uint(TokenDistributor.PoolType.CLAIMABLE));
+
+        // Add same addresses to both pools
+        address[] memory users = new address[](3);
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        users[2] = address(0x3);
+
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = 100_000 * 10**18;
+        amounts[1] = 200_000 * 10**18;
+        amounts[2] = 300_000 * 10**18;
+
+        distributor.addAddressesToPool(autoPoolId, users, amounts);
+        distributor.addAddressesToPool(claimPoolId, users, amounts);
+
+        // Verify amounts for each user in both pools
+        for (uint i = 0; i < users.length; i++) {
+            assertEq(distributor.getClaimableAmount(autoPoolId, users[i]), amounts[i]);
+            assertEq(distributor.getClaimableAmount(claimPoolId, users[i]), amounts[i]);
+        }
+
+        // Verify participants list
+        address[] memory autoParticipants = distributor.getParticipants(autoPoolId);
+        address[] memory claimParticipants = distributor.getParticipants(claimPoolId);
+
+        for (uint i = 0; i < users.length; i++) {
+            assertEq(autoParticipants[i], users[i]);
+            assertEq(claimParticipants[i], users[i]);
+        }
     }
 } 
