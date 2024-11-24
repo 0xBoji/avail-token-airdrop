@@ -47,6 +47,55 @@ contract TokenDistributorTest is Test {
         assertEq(uint(poolType), uint(TokenDistributor.PoolType.CLAIMABLE));
     }
 
+    function test_AddTokenToPoolWithAmount() public {
+        // Step 1: Create pool
+        uint256 poolId = distributor.createAutoPool("Test Pool");
+    
+        // Step 2: Add addresses
+        address[] memory addresses = new address[](2);
+        addresses[0] = user1;
+        addresses[1] = user2;
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 400 * 10**18;
+        amounts[1] = 600 * 10**18;
+    
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+    
+        // Step 3: Add token with specific amount
+        uint256 tokenAmount = 1200 * 10**18; // More than total distribution amount
+        token.approve(address(distributor), tokenAmount);
+        distributor.addTokenToPool(poolId, address(token), tokenAmount);
+    
+        // Verify pool info
+        (address poolToken, uint256 totalAmount,,,,) = distributor.getPoolInfo(poolId);
+        assertEq(poolToken, address(token));
+        assertEq(token.balanceOf(address(distributor)), tokenAmount);
+    }
+
+    function testFail_AddTokenToPoolWithInsufficientAmount() public {
+        // Step 1: Create pool
+        uint256 poolId = distributor.createAutoPool("Test Pool");
+    
+        // Step 2: Add addresses
+        address[] memory addresses = new address[](2);
+        addresses[0] = user1;
+        addresses[1] = user2;
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 400 * 10**18;
+        amounts[1] = 600 * 10**18;
+    
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+    
+        // Step 3: Try to add token with insufficient amount
+        uint256 insufficientAmount = 500 * 10**18; // Less than total distribution amount
+        token.approve(address(distributor), insufficientAmount);
+        
+        // This should fail because amount is less than total distribution amount
+        distributor.addTokenToPool(poolId, address(token), insufficientAmount);
+    }
+
     function test_AddAddressesToPool() public {
         uint256 poolId = distributor.createAutoPool("Test Pool");
 
@@ -62,6 +111,44 @@ contract TokenDistributorTest is Test {
 
         assertEq(distributor.getClaimableAmount(poolId, user1), 400 * 10**18);
         assertEq(distributor.getClaimableAmount(poolId, user2), 600 * 10**18);
+    }
+    
+    function testFail_AddTokenToPoolWithZeroAmount() public {
+        uint256 poolId = distributor.createAutoPool("Test Pool");
+    
+        address[] memory addresses = new address[](1);
+        addresses[0] = user1;
+        
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 100 * 10**18;
+    
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+    
+        // This should fail because amount is zero
+        distributor.addTokenToPool(poolId, address(token), 0);
+    }
+
+    function test_AddTokenToPoolWithExactAmount() public {
+        uint256 poolId = distributor.createAutoPool("Test Pool");
+    
+        address[] memory addresses = new address[](2);
+        addresses[0] = user1;
+        addresses[1] = user2;
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 400 * 10**18;
+        amounts[1] = 600 * 10**18;
+    
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+    
+        // Add token with exact amount needed for distribution
+        uint256 exactAmount = 1000 * 10**18;
+        token.approve(address(distributor), exactAmount);
+        distributor.addTokenToPool(poolId, address(token), exactAmount);
+    
+        (address poolToken, uint256 totalAmount,,,,) = distributor.getPoolInfo(poolId);
+        assertEq(poolToken, address(token));
+        assertEq(totalAmount, exactAmount);
     }
 
     function test_AddTokenToPool() public {
