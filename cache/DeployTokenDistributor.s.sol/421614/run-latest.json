@@ -1,0 +1,10 @@
+{
+  "transactions": [
+    {
+      "rpc": "https://sepolia-rollup.arbitrum.io/rpc"
+    },
+    {
+      "rpc": "https://sepolia-rollup.arbitrum.io/rpc"
+    }
+  ]
+}

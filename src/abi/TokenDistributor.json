@@ -6,20 +6,20 @@
   },
   {
     "type": "function",
-    "name": "add_address_amount_to_pool",
+    "name": "addAddressesToPool",
     "inputs": [
       {
-        "name": "_poolId",
+        "name": "poolId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "_addresses",
+        "name": "addresses",
         "type": "address[]",
         "internalType": "address[]"
       },
       {
-        "name": "_amounts",
+        "name": "amounts",
         "type": "uint256[]",
         "internalType": "uint256[]"
       }
@@ -29,20 +29,20 @@
   },
   {
     "type": "function",
-    "name": "add_token_to_pool",
+    "name": "addTokenToPool",
     "inputs": [
       {
-        "name": "_poolId",
+        "name": "poolId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "_tokenAddress",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "_amount",
+        "name": "amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -52,10 +52,10 @@
   },
   {
     "type": "function",
-    "name": "claim_token_by_pool",
+    "name": "claim",
     "inputs": [
       {
-        "name": "_poolId",
+        "name": "poolId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -65,32 +65,12 @@
   },
   {
     "type": "function",
-    "name": "create_pool",
+    "name": "createAutoPool",
     "inputs": [
       {
-        "name": "_tokenAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_totalAmount",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_description",
+        "name": "name",
         "type": "string",
         "internalType": "string"
-      },
-      {
-        "name": "_startClaimTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_endClaimTime",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -104,22 +84,12 @@
   },
   {
     "type": "function",
-    "name": "create_pool_no_token",
+    "name": "createClaimPool",
     "inputs": [
       {
-        "name": "_description",
+        "name": "name",
         "type": "string",
         "internalType": "string"
-      },
-      {
-        "name": "_startClaimTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_endClaimTime",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -133,10 +103,73 @@
   },
   {
     "type": "function",
-    "name": "get_all_addresses_in_pool",
+    "name": "currentPoolId",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "distributeToAll",
     "inputs": [
       {
-        "name": "_poolId",
+        "name": "poolId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getAllPoolIds",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getClaimableAmount",
+    "inputs": [
+      {
+        "name": "poolId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getParticipants",
+    "inputs": [
+      {
+        "name": "poolId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -152,34 +185,59 @@
   },
   {
     "type": "function",
-    "name": "get_token_address",
+    "name": "getPoolInfo",
     "inputs": [
       {
-        "name": "_poolId",
+        "name": "poolId",
         "type": "uint256",
         "internalType": "uint256"
       }
     ],
     "outputs": [
       {
-        "name": "",
+        "name": "token",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "totalAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "isTokenAdded",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "isDistributed",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "poolType",
+        "type": "uint8",
+        "internalType": "enum TokenDistributor.PoolType"
       }
     ],
     "stateMutability": "view"
   },
   {
     "type": "function",
-    "name": "get_token_claimable_by_pool",
+    "name": "hasUserClaimed",
     "inputs": [
       {
-        "name": "_poolId",
+        "name": "poolId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "_user",
+        "name": "user",
         "type": "address",
         "internalType": "address"
       }
@@ -187,32 +245,8 @@
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "get_token_in_pool",
-    "inputs": [
-      {
-        "name": "_poolId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -232,19 +266,6 @@
   },
   {
     "type": "function",
-    "name": "poolCounter",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "pools",
     "inputs": [
       {
@@ -255,7 +276,7 @@
     ],
     "outputs": [
       {
-        "name": "tokenAddress",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       },
@@ -265,45 +286,27 @@
         "internalType": "uint256"
       },
       {
-        "name": "description",
+        "name": "name",
         "type": "string",
         "internalType": "string"
       },
       {
-        "name": "startClaimTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "endClaimTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "createTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "isActive",
+        "name": "isTokenAdded",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "isDistributed",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "poolType",
+        "type": "uint8",
+        "internalType": "enum TokenDistributor.PoolType"
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "reclaim_pool_token",
-    "inputs": [
-      {
-        "name": "_poolId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -327,7 +330,7 @@
   },
   {
     "type": "event",
-    "name": "AddressAdded",
+    "name": "AddressesAdded",
     "inputs": [
       {
         "name": "poolId",
@@ -336,13 +339,7 @@
         "internalType": "uint256"
       },
       {
-        "name": "user",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "amount",
+        "name": "totalAddresses",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -380,7 +377,32 @@
         "internalType": "uint256"
       },
       {
-        "name": "tokenAddress",
+        "name": "name",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "poolType",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum TokenDistributor.PoolType"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TokenAddedToPool",
+    "inputs": [
+      {
+        "name": "poolId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
         "type": "address",
         "indexed": false,
         "internalType": "address"
@@ -390,12 +412,6 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
-      },
-      {
-        "name": "description",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
       }
     ],
     "anonymous": false
@@ -427,18 +443,12 @@
   },
   {
     "type": "event",
-    "name": "TokenReclaimed",
+    "name": "TokensDistributed",
     "inputs": [
       {
         "name": "poolId",
         "type": "uint256",
         "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
         "internalType": "uint256"
       }
     ],

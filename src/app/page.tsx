@@ -13,6 +13,9 @@ interface AddressAmount {
   amount: string;
 }
 
+const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0xafc80bf84f62A7ae5926Cb8949B373f663153d66';
+const AVAIL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_AVAIL_TOKEN_ADDRESS || '0x421eEeF4f73c23B976a8AA82b5DD74999260adAc';
+
 export default function Home() {
   const [account, setAccount] = useState('');
   const [poolId, setPoolId] = useState('');
@@ -44,75 +47,135 @@ export default function Home() {
   // Create Pool
   async function createPool() {
     try {
+      if (!DISTRIBUTOR_ADDRESS) {
+        throw new Error('Please configure NEXT_PUBLIC_DISTRIBUTOR_ADDRESS in your environment variables');
+      }
+
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-      const contract = new ethers.Contract(process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS!, TokenDistributorABI, signer);
+      const contract = new ethers.Contract(
+        DISTRIBUTOR_ADDRESS,
+        TokenDistributorABI,
+        signer
+      );
 
+      console.log('Creating pool with name:', poolName);
+      console.log('Pool type:', poolType);
+      
+      let tx;
       if (poolType === 'auto') {
-        const tx = await contract.createAutoPool(poolName);
-        await tx.wait();
+        tx = await contract.createAutoPool(poolName);
       } else {
-        const tx = await contract.createClaimPool(poolName);
-        await tx.wait();
+        tx = await contract.createClaimPool(poolName);
+      }
+
+      console.log('Transaction sent:', tx.hash);
+      const receipt = await tx.wait();
+      console.log('Pool created successfully:', receipt);
+
+      // Get the pool ID from the event
+      const event = receipt.events?.find(e => e.event === 'PoolCreated');
+      if (event) {
+        const poolId = event.args?.poolId.toString();
+        console.log('New pool ID:', poolId);
+        setPoolId(poolId);
       }
     } catch (error) {
       console.error('Error creating pool:', error);
+      // You might want to show this error to the user
+      alert('Failed to create pool: ' + (error as Error).message);
     }
   }
 
   // Add Addresses
   async function addAddresses() {
     try {
+      if (!DISTRIBUTOR_ADDRESS) {
+        throw new Error('Distributor contract address not configured');
+      }
+
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-      const contract = new ethers.Contract(process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS!, TokenDistributorABI, signer);
+      const contract = new ethers.Contract(
+        DISTRIBUTOR_ADDRESS,
+        TokenDistributorABI,
+        signer
+      );
 
-      const addressList = addresses.split('\n').map(addr => addr.trim());
-      const amountList = amounts.split('\n').map(amt => ethers.utils.parseEther(amt));
+      // Convert addresses and amounts from the table
+      const addressList = addressAmounts.map(item => item.address);
+      const amountList = addressAmounts.map(item => ethers.utils.parseEther(item.amount));
 
-      const tx = await contract.addAddressesToPool(poolId, addressList, amountList);
+      console.log('Adding addresses to pool:', selectedPoolId);
+      console.log('Addresses:', addressList);
+      console.log('Amounts:', amountList);
+
+      const tx = await contract.addAddressesToPool(selectedPoolId, addressList, amountList);
       await tx.wait();
+      console.log('Addresses added successfully');
+
+      // Clear the address list after successful addition
+      setAddressAmounts([]);
+      setEditAddress('');
+      setEditAmount('');
     } catch (error) {
       console.error('Error adding addresses:', error);
+      alert('Failed to add addresses: ' + (error as Error).message);
     }
   }
 
   // Add Token to Pool
-  async function addTokenToPool() {
+  async function addTokenToPool(amount: string) {
     try {
+      if (!DISTRIBUTOR_ADDRESS) {
+        throw new Error('Contract addresses not configured');
+      }
+
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-      const contract = new ethers.Contract(process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS!, TokenDistributorABI, signer);
+      const contract = new ethers.Contract(
+        DISTRIBUTOR_ADDRESS,
+        TokenDistributorABI,
+        signer
+      );
+
+      const amountInWei = ethers.utils.parseEther(amount);
 
       // First approve the token transfer
-      const tokenContract = new ethers.Contract(tokenAddress, AvailTokenABI, signer);
-      const totalAmount = await contract.getPoolInfo(poolId).then(info => info.totalAmount);
-      
+      const tokenContract = new ethers.Contract(AVAIL_TOKEN_ADDRESS, AvailTokenABI, signer);
       console.log('Approving tokens...');
-      const approveTx = await tokenContract.approve(process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS, totalAmount);
+      const approveTx = await tokenContract.approve(DISTRIBUTOR_ADDRESS, amountInWei);
       await approveTx.wait();
       console.log('Tokens approved');
 
-      // Then add token to pool
+      // Then add token to pool with amount
       console.log('Adding token to pool...');
-      const tx = await contract.addTokenToPool(poolId, tokenAddress);
+      const tx = await contract.addTokenToPool(poolId, AVAIL_TOKEN_ADDRESS, amountInWei);
       await tx.wait();
       console.log('Token added to pool successfully');
       
-      // Set token added state to true
       setIsTokenAdded(true);
       setIsAddTokenModalOpen(false);
     } catch (error) {
       console.error('Error adding token to pool:', error);
+      alert('Failed to add token: ' + (error as Error).message);
     }
   }
 
   // Distribute or Claim
   async function handleDistribution() {
     try {
+      if (!DISTRIBUTOR_ADDRESS) {
+        throw new Error('Distributor contract address not configured');
+      }
+
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
-      const contract = new ethers.Contract(process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS!, TokenDistributorABI, signer);
+      const contract = new ethers.Contract(
+        DISTRIBUTOR_ADDRESS,
+        TokenDistributorABI,
+        signer
+      );
 
       if (poolType === 'auto') {
         const tx = await contract.distributeToAll(poolId);
@@ -123,6 +186,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error with distribution:', error);
+      alert('Failed to distribute tokens: ' + (error as Error).message);
     }
   }
 
@@ -419,7 +483,15 @@ export default function Home() {
               </div>
 
               <div className="flex justify-end gap-3">
-                {selectedPoolId ? (
+                <button 
+                  onClick={addAddresses}
+                  className="btn btn-primary"
+                  disabled={addressAmounts.length === 0}  // Only check for addresses
+                  title={addressAmounts.length === 0 ? "Please add addresses first" : ""}
+                >
+                  Add Addresses to Pool
+                </button>
+                {selectedPoolId && (
                   <button 
                     onClick={() => setIsAddTokenModalOpen(true)}
                     className="btn btn-secondary flex items-center gap-2"
@@ -429,35 +501,7 @@ export default function Home() {
                     </svg>
                     Add Token
                   </button>
-                ) : (
-                  <button 
-                    className="btn btn-secondary flex items-center gap-2 opacity-50 cursor-not-allowed"
-                    title="Please enter Pool ID first"
-                    disabled
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-4V7a3 3 0 00-3-3V4" />
-                    </svg>
-                    Enter Pool ID First
-                  </button>
                 )}
-                <button 
-                  onClick={addAddresses}
-                  className="btn btn-primary"
-                  disabled={addressAmounts.length === 0 || !isTokenAdded}
-                  title={!isTokenAdded ? "Please add token first" : ""}
-                >
-                  {!isTokenAdded ? (
-                    <div className="flex items-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H9m3-4V7a3 3 0 00-3-3V4" />
-                      </svg>
-                      Add Token First
-                    </div>
-                  ) : (
-                    "Add Addresses to Pool"
-                  )}
-                </button>
               </div>
             </div>
           </div>
@@ -467,8 +511,6 @@ export default function Home() {
             isOpen={isAddTokenModalOpen}
             closeModal={() => setIsAddTokenModalOpen(false)}
             poolId={selectedPoolId}
-            tokenAddress={tokenAddress}
-            setTokenAddress={setTokenAddress}
             onAddToken={addTokenToPool}
           />
 
