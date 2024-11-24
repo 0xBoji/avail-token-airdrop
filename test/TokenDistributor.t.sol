@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Test, console2} from "forge-std/Test.sol";
 import {TokenDistributor} from "../src/TokenDistributor.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../src/AvailToken.sol";
 
 // Mock ERC20 token for testing
 contract MockToken is ERC20 {
@@ -18,6 +19,7 @@ contract TokenDistributorTest is Test {
     address public owner;
     address public user1;
     address public user2;
+    AvailToken public availToken;
 
     function setUp() public {
         owner = address(this);
@@ -26,6 +28,7 @@ contract TokenDistributorTest is Test {
         
         distributor = new TokenDistributor();
         token = new MockToken();
+        availToken = new AvailToken();
     }
 
     function test_CreatePool() public {
@@ -217,5 +220,52 @@ contract TokenDistributorTest is Test {
         assertEq(poolAddresses.length, 2);
         assertEq(poolAddresses[0], user1);
         assertEq(poolAddresses[1], user2);
+    }
+
+    function testAvailTokenDistribution() public {
+        uint256 totalAmount = 1000 * 10**18; // 1000 AVAIL tokens
+        address[] memory users = new address[](3);
+        uint256[] memory amounts = new uint256[](3);
+
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        users[2] = address(0x3);
+
+        amounts[0] = 300 * 10**18;
+        amounts[1] = 400 * 10**18;
+        amounts[2] = 300 * 10**18;
+
+        // Approve tokens for the distributor
+        availToken.approve(address(distributor), totalAmount);
+
+        // Create pool with AVAIL token
+        uint256 startTime = block.timestamp + 1 days;
+        uint256 endTime = startTime + 7 days;
+        uint256 poolId = distributor.create_pool(
+            address(availToken),
+            totalAmount,
+            "AVAIL Distribution",
+            startTime,
+            endTime
+        );
+
+        // Add addresses to the pool
+        distributor.add_address_amount_to_pool(poolId, users, amounts);
+
+        // Warp to after start time to enable claiming
+        vm.warp(startTime + 1);
+
+        // Test claiming
+        vm.prank(address(0x1));
+        distributor.claim_token_by_pool(poolId);
+        assertEq(availToken.balanceOf(address(0x1)), 300 * 10**18);
+
+        vm.prank(address(0x2));
+        distributor.claim_token_by_pool(poolId);
+        assertEq(availToken.balanceOf(address(0x2)), 400 * 10**18);
+
+        vm.prank(address(0x3));
+        distributor.claim_token_by_pool(poolId);
+        assertEq(availToken.balanceOf(address(0x3)), 300 * 10**18);
     }
 } 
