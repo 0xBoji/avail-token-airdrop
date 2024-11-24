@@ -1,18 +1,31 @@
-import { http, createConfig } from 'wagmi';
-import { arbitrumSepolia } from 'wagmi/chains';
+import '@rainbow-me/rainbowkit/styles.css';
 import { getDefaultWallets } from '@rainbow-me/rainbowkit';
+import { configureChains, createConfig } from 'wagmi';
+import { sepolia } from 'wagmi/chains';
+import { publicProvider } from 'wagmi/providers/public';
+
+const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID;
+
+if (!projectId) {
+  throw new Error('Missing NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID');
+}
+
+const { chains, publicClient, webSocketPublicClient } = configureChains(
+  [sepolia],
+  [publicProvider()]
+);
 
 const { connectors } = getDefaultWallets({
-  appName: 'Token Distributor',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+  appName: 'Avail Token Distributor',
+  projectId,
+  chains
 });
 
 export const wagmiConfig = createConfig({
-  chains: [arbitrumSepolia],
-  transports: {
-    [arbitrumSepolia.id]: http(process.env.NEXT_PUBLIC_RPC_URL),
-  },
+  autoConnect: true,
   connectors,
+  publicClient,
+  webSocketPublicClient
 });
 
-export const chains = [arbitrumSepolia]; 
+export { chains }; 

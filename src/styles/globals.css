@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Animated Background */
+.animated-gradient {
+  background: linear-gradient(
+    -45deg,
+    #ffb6c1,  /* Light pink */
+    #e6e6fa,  /* Lavender */
+    #b19cd9,  /* Light purple */
+    #9370db   /* Medium purple */
+  );
+  background-size: 400% 400%;
+  animation: gradient 15s ease infinite;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.glass-container {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Floating Animation for Cards */
+.float-card {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translatey(0px);
+  }
+  50% {
+    transform: translatey(-10px);
+  }
+  100% {
+    transform: translatey(0px);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 
+    disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none 
+    focus:ring-2 focus:ring-offset-2;
+  }
+
+  .btn-primary {
+    @apply bg-blue-500 text-white hover:bg-blue-600 
+    active:bg-blue-700 focus:ring-blue-500
+    shadow-lg hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-gray-700 hover:bg-gray-50 
+    active:bg-gray-100 focus:ring-gray-500
+    shadow-lg hover:shadow-xl
+    border border-gray-200;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg 
+    focus:ring-2 focus:ring-blue-500 focus:border-transparent
+    outline-none transition-all duration-200
+    disabled:bg-gray-100 disabled:cursor-not-allowed
+    placeholder-gray-400 bg-white/80 backdrop-blur-sm;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100/50 backdrop-blur-sm rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300/80 rounded-full hover:bg-gray-400/80 transition-colors;
+}
+
+/* Footer styles */
+.footer-link {
+  @apply text-gray-600 hover:text-gray-900 transition-colors 
+  hover:scale-110 transform duration-200;
+} 
