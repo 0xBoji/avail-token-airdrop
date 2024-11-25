@@ -6,8 +6,15 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import TokenDistributorABI from '../abi/TokenDistributor.json';
 import AvailTokenABI from '../abi/AvailToken.json';
 import * as XLSX from 'xlsx';
-import AddTokenModal from '../components/AddTokenModal';
-import PoolList from '../components/PoolList';
+import dynamic from 'next/dynamic';
+
+const AddTokenModal = dynamic(() => import('../components/AddTokenModal'), {
+  loading: () => <p>Loading...</p>
+});
+
+const PoolList = dynamic(() => import('../components/PoolList'), {
+  loading: () => <p>Loading...</p>
+});
 
 interface AddressAmount {
   address: string;
