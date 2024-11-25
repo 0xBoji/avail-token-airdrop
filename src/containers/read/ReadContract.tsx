@@ -1,25 +1,22 @@
 "use client"
-import { useReadContract } from "wagmi"
-
+import { useContractRead } from "wagmi"
 import { counterAbi } from "@/constants/abi"
 import { counterAddress } from "@/constants"
 
 export function ReadContract() {
-  const {
-    data: counter,
-    status,
-    isLoading,
-    error,
-  } = useReadContract({
-    abi: counterAbi,
+  const { data, isLoading, isError } = useContractRead({
     address: counterAddress,
-    functionName: "number",
+    abi: counterAbi,
+    functionName: 'number',
   })
-  console.log(counter, status, isLoading, error)
+
+  if (isLoading) return <div>Loading...</div>
+  if (isError) return <div>Error fetching number</div>
 
   return (
     <div>
-      {isLoading ? <div>Loading</div> : <p>Counter: {counter?.toString()}</p>}
+      <div className="text-sm font-medium text-gray-500">Current number:</div>
+      <div className="mt-1 text-3xl font-semibold">{data?.toString()}</div>
     </div>
   )
 }

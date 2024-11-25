@@ -1,47 +1,34 @@
-import { getDefaultWallets, getDefaultConfig } from "@rainbow-me/rainbowkit"
+import { getDefaultConfig } from "@rainbow-me/rainbowkit"
+import { arbitrumSepolia } from "wagmi/chains"
+import { http } from "viem"
 import {
   argentWallet,
   trustWallet,
   ledgerWallet,
 } from "@rainbow-me/rainbowkit/wallets"
-import {
-  arbitrum,
-  arbitrumSepolia,
-  arbitrumNova,
-  arbitrumGoerli,
-  localhost,
-} from "wagmi/chains"
-import { arbitrumStylus } from "@/utils/arbitrumStylus"
 
-const { wallets } = getDefaultWallets()
+const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '29d61c7872beb6491c27c16145d941b9'
 
-export const WALLETCONNECT_PROJECT_ID =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? ""
-if (!WALLETCONNECT_PROJECT_ID) {
-  console.warn(
-    "You need to provide a NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID env variable"
-  )
-}
-export const config = getDefaultConfig({
-  appName: "RainbowKit demo",
-  projectId: WALLETCONNECT_PROJECT_ID,
+export const rainbowConfig = getDefaultConfig({
+  appName: "AVAIL Token Distribution",
+  projectId: projectId,
+  chains: [arbitrumSepolia],
+  transports: {
+    [arbitrumSepolia.id]: http(
+      process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc'
+    ),
+  },
+  ssr: true,
   wallets: [
-    ...wallets,
     {
-      groupName: "Other",
-      wallets: [argentWallet, trustWallet, ledgerWallet],
+      groupName: 'Other Wallets',
+      wallets: [
+        argentWallet,
+        trustWallet,
+        ledgerWallet,
+      ],
     },
   ],
-  chains: [
-    arbitrumStylus,
-    arbitrum,
-    arbitrumSepolia,
-    arbitrumNova,
-    arbitrumGoerli,
-    localhost,
-    ...(process.env.NEXT_PUBLIC_ENABLE_TESTNETS === "true"
-      ? [arbitrumSepolia, arbitrumNova, arbitrumGoerli]
-      : []),
-  ],
-  ssr: true,
 })
+
+export { rainbowConfig as config }

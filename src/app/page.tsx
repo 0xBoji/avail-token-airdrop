@@ -75,7 +75,7 @@ export default function Home() {
       console.log('Pool created successfully:', receipt);
 
       // Get the pool ID from the event
-      const event = receipt.events?.find(e => e.event === 'PoolCreated');
+      const event = receipt.events?.find((e: { event: string }) => e.event === 'PoolCreated');
       if (event) {
         const poolId = event.args?.poolId.toString();
         console.log('New pool ID:', poolId);
@@ -330,23 +330,65 @@ export default function Home() {
     reader.onload = (event) => {
       try {
         const data = event.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        if (!data) {
+          throw new Error('No data read from file');
+        }
+
+        // Set a reasonable size limit (e.g., 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error('File is too large. Please use a file smaller than 5MB');
+        }
+
+        const workbook = XLSX.read(data, { 
+          type: 'binary',
+          cellDates: true,
+          cellNF: false,
+          cellText: false
+        });
+
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as { Address: string; Amount: number }[];
+        
+        // Get raw data without headers
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          raw: true,
+          defval: ''
+        });
+        
+        // Process data directly from columns A and B
+        const formattedData = jsonData
+          .filter((row: any) => row[0] && row[1]) // Only take rows with both columns filled
+          .map((row: any) => ({
+            address: String(row[0]).trim(),
+            amount: String(row[1]).trim()
+          }));
 
-        const formattedData = jsonData.map(row => ({
-          address: row.Address,
-          amount: row.Amount.toString()
-        }));
+        if (formattedData.length === 0) {
+          throw new Error('No valid data found in Excel file');
+        }
 
+        // Clear memory
+        reader.onload = null;
         setAddressAmounts(formattedData);
+        alert('Excel file imported successfully!');
       } catch (error) {
         console.error('Error parsing Excel file:', error);
-        alert('Error parsing Excel file. Please check the format.');
+        alert(`Error parsing Excel file: ${(error as Error).message}`);
       }
     };
-    reader.readAsBinaryString(file);
+
+    reader.onerror = () => {
+      alert('Error reading file');
+      reader.abort();
+    };
+
+    try {
+      reader.readAsBinaryString(file);
+    } catch (error) {
+      console.error('Error starting file read:', error);
+      alert('Error reading file');
+    }
   }, []);
 
   const handleEditSave = (index: number) => {

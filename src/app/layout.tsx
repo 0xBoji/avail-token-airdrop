@@ -2,9 +2,12 @@
 
 import { WagmiConfig } from 'wagmi';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
-import { wagmiConfig, chains } from '../config/wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { wagmiConfig } from '../config/wagmi';
 import '@rainbow-me/rainbowkit/styles.css';
 import '../styles/globals.css';
+
+const queryClient = new QueryClient();
 
 export default function RootLayout({
   children,
@@ -13,16 +16,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning={true}>
-        <WagmiConfig config={wagmiConfig}>
-          <RainbowKitProvider 
-            chains={chains}
-            theme={darkTheme()}
-            modalSize="compact"
-          >
-            {children}
-          </RainbowKitProvider>
-        </WagmiConfig>
+      <body>
+        <QueryClientProvider client={queryClient}>
+          <WagmiConfig config={wagmiConfig}>
+            <RainbowKitProvider theme={darkTheme()}>
+              {children}
+            </RainbowKitProvider>
+          </WagmiConfig>
+        </QueryClientProvider>
       </body>
     </html>
   );
