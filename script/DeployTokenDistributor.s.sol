@@ -6,11 +6,13 @@ import "../src/TokenDistributor.sol";
 import "../src/AvailToken.sol";
 
 contract DeployScript is Script {
+    function setUp() public {}
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy AVAIL Token first
+        // Deploy AVAIL Token
         AvailToken token = new AvailToken();
         console.log("AvailToken deployed to:", address(token));
 

@@ -23,6 +23,9 @@ contract TokenDistributor is Ownable {
    uint256 public currentPoolId;
    uint256[] private poolIds;
 
+   // Add this state variable to track distribution progress
+   mapping(uint256 => uint256) private distributionProgress;
+
    event PoolCreated(uint256 indexed poolId, string name, PoolType poolType);
    event AddressesAdded(uint256 indexed poolId, uint256 totalAddresses);
    event TokenAddedToPool(uint256 indexed poolId, address token, uint256 amount);
@@ -103,44 +106,77 @@ contract TokenDistributor is Ownable {
    }
 
    // Step 4 (Type 1): Batch transfer to all addresses
-   function distributeToAll(uint256 poolId) external onlyOwner {
+   function distributeToAll(uint256 poolId, uint256 batchSize) external onlyOwner {
        Pool storage pool = pools[poolId];
        require(pool.poolType == PoolType.AUTO_TRANSFER, "Not an auto-transfer pool");
        require(pool.isTokenAdded, "Token not added yet");
        require(!pool.isDistributed, "Already distributed");
 
        IERC20 token = IERC20(pool.token);
-
-       // Prepare arrays for batch transfer
-       address[] memory recipients = new address[](pool.participants.length);
-       uint256[] memory amounts = new uint256[](pool.participants.length);
+       uint256 participantsLength = pool.participants.length;
        
-       for(uint256 i = 0; i < pool.participants.length; i++) {
-           recipients[i] = pool.participants[i];
-           amounts[i] = pool.distributionAmount[recipients[i]];
+       // Get the starting index from progress tracking
+       uint256 startIndex = distributionProgress[poolId];
+       require(startIndex < participantsLength, "Distribution already completed");
+       
+       // Calculate the end index for this batch
+       uint256 endIndex = startIndex + batchSize;
+       if (endIndex > participantsLength) {
+           endIndex = participantsLength;
        }
 
-       // Internal batch transfer - single transaction
-       _batchTransfer(token, recipients, amounts);
+       // Prepare arrays for batch transfer
+       address[] memory recipients = new address[](endIndex - startIndex);
+       uint256[] memory amounts = new uint256[](endIndex - startIndex);
+       
+       for(uint256 i = startIndex; i < endIndex; i++) {
+           recipients[i - startIndex] = pool.participants[i];
+           amounts[i - startIndex] = pool.distributionAmount[pool.participants[i]];
+       }
 
-       pool.isDistributed = true;
-       emit TokensDistributed(poolId);
+       // Perform batch transfer
+       _batchTransfer(token, recipients, amounts, poolId);
+
+       // Update progress
+       distributionProgress[poolId] = endIndex;
+
+       // Mark as distributed if this is the last batch
+       if (endIndex == participantsLength) {
+           pool.isDistributed = true;
+           emit TokensDistributed(poolId);
+       }
    }
 
-   // Internal batch transfer function
+   // Internal batch transfer function with improved error handling
    function _batchTransfer(
        IERC20 token,
        address[] memory recipients,
-       uint256[] memory amounts
+       uint256[] memory amounts,
+       uint256 poolId
    ) internal {
        require(recipients.length == amounts.length, "Length mismatch");
        
        for(uint256 i = 0; i < recipients.length; i++) {
            if(amounts[i] > 0) {
-               require(token.transfer(recipients[i], amounts[i]), "Transfer failed");
-               emit TokenClaimed(currentPoolId, recipients[i], amounts[i]);
+               bool success = token.transfer(recipients[i], amounts[i]);
+               require(success, string(abi.encodePacked("Transfer failed for recipient: ", addressToString(recipients[i]))));
+               emit TokenClaimed(poolId, recipients[i], amounts[i]);
            }
        }
+   }
+
+   // Helper function to convert address to string for error messages
+   function addressToString(address _addr) internal pure returns(string memory) {
+       bytes32 value = bytes32(uint256(uint160(_addr)));
+       bytes memory alphabet = "0123456789abcdef";
+       bytes memory str = new bytes(42);
+       str[0] = "0";
+       str[1] = "x";
+       for (uint256 i = 0; i < 20; i++) {
+           str[2+i*2] = alphabet[uint8(value[i + 12] >> 4)];
+           str[3+i*2] = alphabet[uint8(value[i + 12] & 0x0f)];
+       }
+       return string(str);
    }
 
    // Step 4 (Type 2): Users claim their tokens 
@@ -192,5 +228,76 @@ contract TokenDistributor is Ownable {
    
    function getAllPoolIds() external view returns (uint256[] memory) {
        return poolIds;
+   }
+
+   // Get all auto-transfer pools
+   function getAllAutoPools() external view returns (uint256[] memory) {
+       uint256[] memory autoPools = new uint256[](poolIds.length);
+       uint256 count = 0;
+       
+       for (uint256 i = 0; i < poolIds.length; i++) {
+           if (pools[poolIds[i]].poolType == PoolType.AUTO_TRANSFER) {
+               autoPools[count] = poolIds[i];
+               count++;
+           }
+       }
+       
+       // Create correctly sized array
+       uint256[] memory result = new uint256[](count);
+       for (uint256 i = 0; i < count; i++) {
+           result[i] = autoPools[i];
+       }
+       
+       return result;
+   }
+   
+   // Get all claimable pools
+   function getAllClaimablePools() external view returns (uint256[] memory) {
+       uint256[] memory claimablePools = new uint256[](poolIds.length);
+       uint256 count = 0;
+       
+       for (uint256 i = 0; i < poolIds.length; i++) {
+           if (pools[poolIds[i]].poolType == PoolType.CLAIMABLE) {
+               claimablePools[count] = poolIds[i];
+               count++;
+           }
+       }
+       
+       // Create correctly sized array
+       uint256[] memory result = new uint256[](count);
+       for (uint256 i = 0; i < count; i++) {
+           result[i] = claimablePools[i];
+       }
+       
+       return result;
+   }
+
+   // Get detailed pool information for multiple pools
+   function getPoolsInfo(uint256[] calldata _poolIds) external view returns (
+       address[] memory tokens,
+       uint256[] memory totalAmounts,
+       string[] memory names,
+       bool[] memory areTokensAdded,
+       bool[] memory areDistributed,
+       PoolType[] memory poolTypes
+   ) {
+       tokens = new address[](_poolIds.length);
+       totalAmounts = new uint256[](_poolIds.length);
+       names = new string[](_poolIds.length);
+       areTokensAdded = new bool[](_poolIds.length);
+       areDistributed = new bool[](_poolIds.length);
+       poolTypes = new PoolType[](_poolIds.length);
+       
+       for (uint256 i = 0; i < _poolIds.length; i++) {
+           Pool storage pool = pools[_poolIds[i]];
+           tokens[i] = pool.token;
+           totalAmounts[i] = pool.totalAmount;
+           names[i] = pool.name;
+           areTokensAdded[i] = pool.isTokenAdded;
+           areDistributed[i] = pool.isDistributed;
+           poolTypes[i] = pool.poolType;
+       }
+       
+       return (tokens, totalAmounts, names, areTokensAdded, areDistributed, poolTypes);
    }
 }

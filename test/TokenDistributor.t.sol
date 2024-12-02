@@ -9,7 +9,7 @@ import "../src/AvailToken.sol";
 // Mock ERC20 token for testing
 contract MockToken is ERC20 {
     constructor() ERC20("Mock Token", "MTK") {
-        _mint(msg.sender, 1000000 * 10**18);
+        _mint(msg.sender, 2_000_000 * 10**18);
     }
 }
 
@@ -192,8 +192,8 @@ contract TokenDistributorTest is Test {
         token.approve(address(distributor), amount);
         distributor.addTokenToPool(poolId, address(token), amount);
 
-        // Step 4: Distribute
-        distributor.distributeToAll(poolId);
+        // Step 4: Distribute - now with batch size
+        distributor.distributeToAll(poolId, users.length);
 
         assertEq(token.balanceOf(user1), 400 * 10**18);
         assertEq(token.balanceOf(user2), 600 * 10**18);
@@ -270,8 +270,8 @@ contract TokenDistributorTest is Test {
         availToken.approve(address(distributor), totalAmount);
         distributor.addTokenToPool(poolId, address(availToken), totalAmount);
 
-        // Step 4: Distribute to all
-        distributor.distributeToAll(poolId);
+        // Step 4: Distribute to all - now with batch size
+        distributor.distributeToAll(poolId, users.length);
 
         // Verify balances
         assertEq(availToken.balanceOf(address(0x1)), 100_000 * 10**18);
@@ -411,5 +411,281 @@ contract TokenDistributorTest is Test {
                 assertEq(uint(poolType), uint(TokenDistributor.PoolType.CLAIMABLE));
             }
         }
+    }
+
+    function test_GetAllAutoPools() public {
+        // Create multiple pools of different types
+        uint256 autoPool1 = distributor.createAutoPool("Auto Pool 1");
+        distributor.createClaimPool("Claim Pool 1"); // We don't need this ID
+        uint256 autoPool2 = distributor.createAutoPool("Auto Pool 2");
+        distributor.createClaimPool("Claim Pool 2"); // We don't need this ID
+        
+        // Get all auto pools
+        uint256[] memory autoPools = distributor.getAllAutoPools();
+        
+        // Verify length
+        assertEq(autoPools.length, 2);
+        
+        // Verify the correct pools are returned
+        assertEq(autoPools[0], autoPool1);
+        assertEq(autoPools[1], autoPool2);
+        
+        // Verify pool types
+        for (uint256 i = 0; i < autoPools.length; i++) {
+            (,,,,, TokenDistributor.PoolType poolType) = distributor.getPoolInfo(autoPools[i]);
+            assertEq(uint256(poolType), uint256(TokenDistributor.PoolType.AUTO_TRANSFER));
+        }
+    }
+
+    function test_GetAllClaimablePools() public {
+        // Create multiple pools of different types
+        distributor.createAutoPool("Auto Pool 1"); // We don't need this ID
+        uint256 claimPool1 = distributor.createClaimPool("Claim Pool 1");
+        distributor.createAutoPool("Auto Pool 2"); // We don't need this ID
+        uint256 claimPool2 = distributor.createClaimPool("Claim Pool 2");
+        
+        // Get all claimable pools
+        uint256[] memory claimablePools = distributor.getAllClaimablePools();
+        
+        // Verify length
+        assertEq(claimablePools.length, 2);
+        
+        // Verify the correct pools are returned
+        assertEq(claimablePools[0], claimPool1);
+        assertEq(claimablePools[1], claimPool2);
+        
+        // Verify pool types
+        for (uint256 i = 0; i < claimablePools.length; i++) {
+            (,,,,, TokenDistributor.PoolType poolType) = distributor.getPoolInfo(claimablePools[i]);
+            assertEq(uint256(poolType), uint256(TokenDistributor.PoolType.CLAIMABLE));
+        }
+    }
+
+    function test_GetPoolsInfo() public {
+        // Create pools and add tokens and participants
+        uint256 poolId1 = distributor.createAutoPool("Auto Pool");
+        uint256 poolId2 = distributor.createClaimPool("Claim Pool");
+        
+        // Add addresses to pools
+        address[] memory users = new address[](2);
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 100 * 10**18;
+        amounts[1] = 200 * 10**18;
+        
+        distributor.addAddressesToPool(poolId1, users, amounts);
+        distributor.addAddressesToPool(poolId2, users, amounts);
+        
+        // Add tokens to pools
+        token.approve(address(distributor), 600 * 10**18);
+        distributor.addTokenToPool(poolId1, address(token), 300 * 10**18);
+        distributor.addTokenToPool(poolId2, address(token), 300 * 10**18);
+        
+        // Create array of pool IDs to query
+        uint256[] memory poolIds = new uint256[](2);
+        poolIds[0] = poolId1;
+        poolIds[1] = poolId2;
+        
+        // Get pools info
+        (
+            address[] memory tokens,
+            uint256[] memory totalAmounts,
+            string[] memory names,
+            bool[] memory areTokensAdded,
+            bool[] memory areDistributed,
+            TokenDistributor.PoolType[] memory poolTypes
+        ) = distributor.getPoolsInfo(poolIds);
+        
+        // Verify first pool info
+        assertEq(tokens[0], address(token));
+        assertEq(totalAmounts[0], 300 * 10**18);
+        assertEq(names[0], "Auto Pool");
+        assertTrue(areTokensAdded[0]);
+        assertFalse(areDistributed[0]);
+        assertEq(uint256(poolTypes[0]), uint256(TokenDistributor.PoolType.AUTO_TRANSFER));
+        
+        // Verify second pool info
+        assertEq(tokens[1], address(token));
+        assertEq(totalAmounts[1], 300 * 10**18);
+        assertEq(names[1], "Claim Pool");
+        assertTrue(areTokensAdded[1]);
+        assertFalse(areDistributed[1]);
+        assertEq(uint256(poolTypes[1]), uint256(TokenDistributor.PoolType.CLAIMABLE));
+    }
+
+    function test_EmptyPoolsQueries() public {
+        // Test empty auto pools
+        uint256[] memory autoPools = distributor.getAllAutoPools();
+        assertEq(autoPools.length, 0);
+        
+        // Test empty claimable pools
+        uint256[] memory claimablePools = distributor.getAllClaimablePools();
+        assertEq(claimablePools.length, 0);
+        
+        // Test empty pools info
+        uint256[] memory emptyPoolIds = new uint256[](0);
+        (
+            address[] memory tokens,
+            uint256[] memory totalAmounts,
+            string[] memory names,
+            bool[] memory areTokensAdded,
+            bool[] memory areDistributed,
+            TokenDistributor.PoolType[] memory poolTypes
+        ) = distributor.getPoolsInfo(emptyPoolIds);
+        
+        assertEq(tokens.length, 0);
+        assertEq(totalAmounts.length, 0);
+        assertEq(names.length, 0);
+        assertEq(areTokensAdded.length, 0);
+        assertEq(areDistributed.length, 0);
+        assertEq(poolTypes.length, 0);
+    }
+
+    // Add new test for batch distribution
+    function test_BatchDistribution() public {
+        // Step 1: Create auto pool
+        uint256 poolId = distributor.createAutoPool("Batch Auto Pool");
+
+        // Step 2: Add addresses
+        address[] memory users = new address[](5);
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        users[2] = address(0x3);
+        users[3] = address(0x4);
+        users[4] = address(0x5);
+        
+        uint256[] memory amounts = new uint256[](5);
+        amounts[0] = 100 * 10**18;
+        amounts[1] = 200 * 10**18;
+        amounts[2] = 300 * 10**18;
+        amounts[3] = 400 * 10**18;
+        amounts[4] = 500 * 10**18;
+
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add token
+        uint256 totalAmount = 1500 * 10**18;
+        token.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(token), totalAmount);
+
+        // Step 4: Distribute in batches of 2
+        // First batch (0-1)
+        distributor.distributeToAll(poolId, 2);
+        assertEq(token.balanceOf(address(0x1)), 100 * 10**18);
+        assertEq(token.balanceOf(address(0x2)), 200 * 10**18);
+        assertEq(token.balanceOf(address(0x3)), 0); // Not distributed yet
+        
+        // Second batch (2-3)
+        distributor.distributeToAll(poolId, 2);
+        assertEq(token.balanceOf(address(0x3)), 300 * 10**18);
+        assertEq(token.balanceOf(address(0x4)), 400 * 10**18);
+        assertEq(token.balanceOf(address(0x5)), 0); // Not distributed yet
+        
+        // Final batch (4)
+        distributor.distributeToAll(poolId, 2);
+        assertEq(token.balanceOf(address(0x5)), 500 * 10**18);
+        
+        // Verify pool is marked as distributed
+        (,,,, bool isDistributed,) = distributor.getPoolInfo(poolId);
+        assertTrue(isDistributed);
+
+        // Verify distribution is complete
+        vm.expectRevert("Already distributed");
+        distributor.distributeToAll(poolId, 2);
+    }
+
+    function test_SingleTransactionDistribution() public {
+        // Step 1: Create auto pool
+        uint256 poolId = distributor.createAutoPool("Single Tx Pool");
+
+        // Step 2: Add 5 addresses
+        address[] memory users = new address[](5);
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        users[2] = address(0x3);
+        users[3] = address(0x4);
+        users[4] = address(0x5);
+        
+        uint256[] memory amounts = new uint256[](5);
+        amounts[0] = 100 * 10**18;  // 100 tokens
+        amounts[1] = 200 * 10**18;  // 200 tokens
+        amounts[2] = 300 * 10**18;  // 300 tokens
+        amounts[3] = 400 * 10**18;  // 400 tokens
+        amounts[4] = 500 * 10**18;  // 500 tokens
+
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add tokens
+        uint256 totalAmount = 1500 * 10**18; // 1500 tokens total
+        token.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(token), totalAmount);
+
+        // Step 4: Distribute to all addresses in a single transaction
+        distributor.distributeToAll(poolId, 5); // Set batch size to 5 to handle all in one tx
+
+        // Verify all balances
+        assertEq(token.balanceOf(address(0x1)), 100 * 10**18);
+        assertEq(token.balanceOf(address(0x2)), 200 * 10**18);
+        assertEq(token.balanceOf(address(0x3)), 300 * 10**18);
+        assertEq(token.balanceOf(address(0x4)), 400 * 10**18);
+        assertEq(token.balanceOf(address(0x5)), 500 * 10**18);
+
+        // Verify pool is marked as distributed
+        (,,,, bool isDistributed,) = distributor.getPoolInfo(poolId);
+        assertTrue(isDistributed);
+
+        // Verify distribution progress is complete
+        vm.expectRevert("Already distributed");
+        distributor.distributeToAll(poolId, 5);
+    }
+
+    // Test with larger amount of tokens
+    function test_SingleTransactionLargeDistribution() public {
+        // Step 1: Create auto pool
+        uint256 poolId = distributor.createAutoPool("Large Single Tx Pool");
+
+        // Step 2: Add 5 addresses with larger amounts
+        address[] memory users = new address[](5);
+        users[0] = address(0x1);
+        users[1] = address(0x2);
+        users[2] = address(0x3);
+        users[3] = address(0x4);
+        users[4] = address(0x5);
+        
+        uint256[] memory amounts = new uint256[](5);
+        amounts[0] = 100_000 * 10**18;  // 100k tokens
+        amounts[1] = 200_000 * 10**18;  // 200k tokens
+        amounts[2] = 300_000 * 10**18;  // 300k tokens
+        amounts[3] = 400_000 * 10**18;  // 400k tokens
+        amounts[4] = 500_000 * 10**18;  // 500k tokens
+
+        distributor.addAddressesToPool(poolId, users, amounts);
+
+        // Step 3: Add tokens
+        uint256 totalAmount = 1_500_000 * 10**18; // 1.5M tokens total
+        token.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(token), totalAmount);
+
+        // Record gas usage for large distribution
+        uint256 gasBefore = gasleft();
+        
+        // Step 4: Distribute to all addresses in a single transaction
+        distributor.distributeToAll(poolId, 5);
+        
+        uint256 gasUsed = gasBefore - gasleft();
+        emit log_named_uint("Gas used for 5 address distribution", gasUsed);
+
+        // Verify all balances
+        assertEq(token.balanceOf(address(0x1)), 100_000 * 10**18);
+        assertEq(token.balanceOf(address(0x2)), 200_000 * 10**18);
+        assertEq(token.balanceOf(address(0x3)), 300_000 * 10**18);
+        assertEq(token.balanceOf(address(0x4)), 400_000 * 10**18);
+        assertEq(token.balanceOf(address(0x5)), 500_000 * 10**18);
+
+        // Verify pool is marked as distributed
+        (,,,, bool isDistributed,) = distributor.getPoolInfo(poolId);
+        assertTrue(isDistributed);
     }
 } 
