@@ -8,7 +8,7 @@ import "../src/AvailToken.sol";
 contract AddTokenToPoolScript is Script {
     function run() external {
         uint256 privateKey = vm.envUint("PRIVATE_KEY");
-        address DISTRIBUTOR = 0x61a4bb5Adb395EE226BBCCAF5a393E431F84703C;
+        address DISTRIBUTOR = 0x7d9541d31a343e2B5A711D260C19D353D73dB0Ed;
         address AVAIL_TOKEN = 0x421eEeF4f73c23B976a8AA82b5DD74999260adAc;
         uint256 poolId = 1;
         uint256 amount = 1000 * 10**18; // 1000 tokens
