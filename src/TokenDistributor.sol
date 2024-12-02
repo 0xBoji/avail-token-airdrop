@@ -300,4 +300,23 @@ contract TokenDistributor is Ownable {
        
        return (tokens, totalAmounts, names, areTokensAdded, areDistributed, poolTypes);
    }
+
+   // Add this function to help debug
+   function debugDistribute(uint256 poolId, uint256) external view returns (
+       bool[] memory checks,
+       uint256[] memory values
+   ) {
+       Pool storage pool = pools[poolId];
+       
+       checks = new bool[](3);
+       checks[0] = pool.poolType == PoolType.AUTO_TRANSFER;  // isAutoTransfer
+       checks[1] = pool.isTokenAdded;                        // isTokenAdded
+       checks[2] = !pool.isDistributed;                      // isNotDistributed
+       
+       values = new uint256[](2);
+       values[0] = pool.participants.length;                 // participantsLength
+       values[1] = distributionProgress[poolId];             // startIndex
+       
+       return (checks, values);
+   }
 }
