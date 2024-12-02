@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "export-abi": "mkdir -p abi && forge inspect TokenDistributor abi > abi/TokenDistributor.json"
+  }
+} 
