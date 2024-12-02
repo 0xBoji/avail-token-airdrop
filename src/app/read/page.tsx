@@ -16,10 +16,11 @@ export default function ReadContract() {
   const [pools, setPools] = useState<{ id: string; info: Pool }[]>([]);
   const [selectedPool, setSelectedPool] = useState<string>('');
   const [participants, setParticipants] = useState<{ address: string; amount: string }[]>([]);
+  const [poolType, setPoolType] = useState<'all' | 'auto' | 'claim'>('all');
 
   useEffect(() => {
     loadPools();
-  }, []);
+  }, [poolType]);
 
   useEffect(() => {
     if (selectedPool) {
@@ -36,26 +37,30 @@ export default function ReadContract() {
         provider
       );
 
-      // Get all pool IDs
-      const poolIds = await contract.getAllPoolIds();
+      // Get pool IDs based on selected type
+      let poolIds;
+      if (poolType === 'auto') {
+        poolIds = await contract.getAllAutoPools();
+      } else if (poolType === 'claim') {
+        poolIds = await contract.getAllClaimablePools();
+      } else {
+        poolIds = await contract.getAllPoolIds();
+      }
       
-      // Get info for each pool
-      const poolsInfo = await Promise.all(
-        poolIds.map(async (id: number) => {
-          const info = await contract.getPoolInfo(id);
-          return {
-            id: id.toString(),
-            info: {
-              token: info.token,
-              totalAmount: ethers.utils.formatEther(info.totalAmount),
-              name: info.name,
-              isTokenAdded: info.isTokenAdded,
-              isDistributed: info.isDistributed,
-              poolType: info.poolType
-            }
-          };
-        })
-      );
+      // Get info for all pools at once using the new getPoolsInfo function
+      const poolsData = await contract.getPoolsInfo(poolIds);
+      
+      const poolsInfo = poolIds.map((id: number, index: number) => ({
+        id: id.toString(),
+        info: {
+          token: poolsData.tokens[index],
+          totalAmount: ethers.utils.formatEther(poolsData.totalAmounts[index]),
+          name: poolsData.names[index],
+          isTokenAdded: poolsData.areTokensAdded[index],
+          isDistributed: poolsData.areDistributed[index],
+          poolType: poolsData.poolTypes[index]
+        }
+      }));
 
       setPools(poolsInfo);
     } catch (error) {
@@ -93,6 +98,30 @@ export default function ReadContract() {
     <div className="min-h-screen bg-gradient-to-b from-pink-300 via-purple-300 to-indigo-400">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold mb-8 text-white">Pool Information</h1>
+
+        {/* Pool Type Filter */}
+        <div className="mb-6">
+          <div className="flex space-x-4">
+            <button
+              className={`px-4 py-2 rounded-lg ${poolType === 'all' ? 'bg-white text-purple-600' : 'bg-purple-100 text-purple-800'}`}
+              onClick={() => setPoolType('all')}
+            >
+              All Pools
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg ${poolType === 'auto' ? 'bg-white text-purple-600' : 'bg-purple-100 text-purple-800'}`}
+              onClick={() => setPoolType('auto')}
+            >
+              Auto Pools
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg ${poolType === 'claim' ? 'bg-white text-purple-600' : 'bg-purple-100 text-purple-800'}`}
+              onClick={() => setPoolType('claim')}
+            >
+              Claim Pools
+            </button>
+          </div>
+        </div>
 
         {/* Pools List */}
         <div className="grid gap-6 mb-8">

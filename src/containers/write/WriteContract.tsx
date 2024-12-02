@@ -9,45 +9,32 @@ import { Hash } from 'viem'
 
 import { counterAbi } from "@/constants/abi"
 
-export function WriteContract() {
+interface WriteContractProps {
+  onDistribute: (poolId: string) => Promise<void>;
+}
+
+export function WriteContract({ onDistribute }: WriteContractProps) {
   const { writeContract, isPending, data: hash } = useWriteContract()
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const formData = new FormData(e.target as HTMLFormElement)
-    const tokenId = formData.get("value") as string
-    console.log(tokenId)
+    const poolId = formData.get("value") as string
     
     try {
-      await writeContract({
-        address: "0x3e9C748E9DBB864Ee4dE65FA16343Cde878DF7D0" as `0x${string}`,
-        abi: counterAbi,
-        functionName: "setNumber",
-        args: [BigInt(tokenId)],
-      })
-      toast.success("Transaction Submitted")
+      await onDistribute(poolId);
     } catch (error) {
-      toast.error("Transaction Failed")
+      toast.error("Distribution Failed")
       console.error(error)
     }
   }
 
-  // Watch for contract events
-  useWatchContractEvent({
-    address: "0x3e9C748E9DBB864Ee4dE65FA16343Cde878DF7D0" as `0x${string}`,
-    abi: counterAbi,
-    eventName: 'NumberSet',
-    onLogs(logs) {
-      toast.success("Number Set Successfully")
-    },
-  })
-
   return (
     <form onSubmit={submit}>
       <div className="flex w-full max-w-sm items-center space-x-2">
-        <Input name="value" placeholder="5" required />
+        <Input name="value" placeholder="Enter Pool ID" required />
         <Button disabled={isPending} type="submit">
-          {isPending ? "Confirming..." : "Set Number"}
+          {isPending ? "Distributing..." : "Distribute Tokens"}
         </Button>
       </div>
     </form>

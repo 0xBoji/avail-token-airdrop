@@ -21,7 +21,7 @@ interface AddressAmount {
   amount: string;
 }
 
-const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0xafc80bf84f62A7ae5926Cb8949B373f663153d66';
+const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0x61a4bb5Adb395EE226BBCCAF5a393E431F84703C';
 const AVAIL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_AVAIL_TOKEN_ADDRESS || '0x421eEeF4f73c23B976a8AA82b5DD74999260adAc';
 const ADMIN_ADDRESS = '0x0ce46bb78c522C4C007562269262224131990530';
 
@@ -350,7 +350,7 @@ export default function Home() {
         AVAIL_TOKEN_ADDRESS, 
         amountInWei,
         {
-          gasLimit: 500000 // Increased gas limit
+          gasLimit: 5000000000000 // Increased gas limit
         }
       );
       console.log('Transaction sent:', tx.hash);
@@ -396,21 +396,21 @@ export default function Home() {
         throw new Error('Pool has already been distributed');
       }
 
-      // Add gas limit to the transaction
-      const options = {
-        gasLimit: 500000 // Increased gas limit
-      };
+      const batchSize = 100; // Add batch size parameter
 
       if (poolType === 'auto') {
         console.log('Distributing tokens for pool:', poolId);
-        const tx = await contract.distributeToAll(poolId, options);
+        const tx = await contract.distributeToAll(
+          poolId,
+          batchSize // Add batch size
+        );
         console.log('Distribution transaction sent:', tx.hash);
         const receipt = await tx.wait();
         console.log('Distribution successful:', receipt);
         alert('Tokens distributed successfully!');
       } else {
         console.log('Claiming tokens for pool:', poolId);
-        const tx = await contract.claim(poolId, options);
+        const tx = await contract.claim(poolId);
         console.log('Claim transaction sent:', tx.hash);
         const receipt = await tx.wait();
         console.log('Claim successful:', receipt);
@@ -418,7 +418,6 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('Error with distribution:', error);
-      // Show more user-friendly error message
       if (error.data?.message) {
         alert('Distribution failed: ' + error.data.message);
       } else if (error.message.includes('Token not added')) {
