@@ -208,10 +208,9 @@ contract TokenDistributorTest is Test {
         token.approve(address(distributor), 30 * 1e18);
         distributor.addTokenToPool(poolId, address(token), 30 * 1e18);
         
-        // Should not revert with batch size 0, but should not process any transfers
+        // Should revert with specific message for zero batch size
+        vm.expectRevert("Batch size must be greater than 0");
         distributor.distributeToAll(poolId, 0);
-        assertEq(token.balanceOf(user1), 0);
-        assertEq(token.balanceOf(user2), 0);
     }
 
     function test_DistributeToAllWithExcessiveBatch() public {
@@ -258,5 +257,128 @@ contract TokenDistributorTest is Test {
         // Should revert when transfer fails
         vm.expectRevert();
         distributor.distributeToAll(poolId, 2);
+    }
+
+    function test_DistributeWithNewSafeguards() public {
+        // Create pool and setup with 150 addresses
+        uint256 poolId = distributor.createAutoPool("Large Test Pool");
+        
+        // Create 150 addresses and amounts
+        address[] memory addresses = new address[](150);
+        uint256[] memory amounts = new uint256[](150);
+        uint256 totalAmount = 0;
+        
+        for(uint256 i = 0; i < 150; i++) {
+            addresses[i] = vm.addr(i + 1);
+            amounts[i] = 1e18; // 1 token each
+            totalAmount += 1e18;
+        }
+        
+        // Setup pool
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+        token.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(token), totalAmount);
+
+        // Test 1: Should revert with batch size 0
+        vm.expectRevert("Batch size must be greater than 0");
+        distributor.distributeToAll(poolId, 0);
+
+        // Test 2: Should revert with batch size > 100
+        vm.expectRevert("Batch size too large");
+        distributor.distributeToAll(poolId, 101);
+
+        // Test 3: Distribute in valid batch sizes
+        // First batch
+        distributor.distributeToAll(poolId, 50);
+        for(uint256 i = 0; i < 50; i++) {
+            assertEq(token.balanceOf(addresses[i]), 1e18);
+        }
+
+        // Second batch
+        distributor.distributeToAll(poolId, 50);
+        for(uint256 i = 50; i < 100; i++) {
+            assertEq(token.balanceOf(addresses[i]), 1e18);
+        }
+
+        // Final batch
+        distributor.distributeToAll(poolId, 50); // Will only process remaining 50
+        for(uint256 i = 100; i < 150; i++) {
+            assertEq(token.balanceOf(addresses[i]), 1e18);
+        }
+
+        // Test 4: Should revert when trying to distribute again
+        vm.expectRevert("Already distributed");  // Updated to match actual error message
+        distributor.distributeToAll(poolId, 50);
+    }
+
+    function test_DistributeWithInsufficientBalance() public {
+        uint256 poolId = distributor.createAutoPool("Insufficient Balance Pool");
+        
+        // Setup 5 addresses
+        address[] memory addresses = new address[](5);
+        uint256[] memory amounts = new uint256[](5);
+        uint256 totalAmount = 0;
+        
+        for(uint256 i = 0; i < 5; i++) {
+            addresses[i] = vm.addr(i + 1);
+            amounts[i] = 10 * 1e18; // 10 tokens each
+            totalAmount += amounts[i];
+        }
+        
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+        
+        // First approve and transfer the full amount required
+        token.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(token), totalAmount);
+
+        // Now drain some tokens from the contract to simulate insufficient balance
+        // (You'll need to add a function to the token contract to do this)
+        address drainTo = vm.addr(999);
+        vm.prank(address(distributor));
+        token.transfer(drainTo, totalAmount / 2);
+
+        // Should revert due to insufficient balance
+        vm.expectRevert("Insufficient token balance");
+        distributor.distributeToAll(poolId, 5);
+    }
+
+    function test_DistributePartialBatch() public {
+        uint256 poolId = distributor.createAutoPool("Partial Batch Pool");
+        
+        // Setup 25 addresses
+        address[] memory addresses = new address[](25);
+        uint256[] memory amounts = new uint256[](25);
+        uint256 totalAmount = 0;
+        
+        for(uint256 i = 0; i < 25; i++) {
+            addresses[i] = vm.addr(i + 1);
+            amounts[i] = 1e18; // 1 token each
+            totalAmount += 1e18;
+        }
+        
+        distributor.addAddressesToPool(poolId, addresses, amounts);
+        token.approve(address(distributor), totalAmount);
+        distributor.addTokenToPool(poolId, address(token), totalAmount);
+
+        // Distribute with batch size of 20 (should process 20)
+        distributor.distributeToAll(poolId, 20);
+        
+        // Verify first 20 received tokens
+        for(uint256 i = 0; i < 20; i++) {
+            assertEq(token.balanceOf(addresses[i]), 1e18);
+        }
+        
+        // Verify last 5 haven't received tokens
+        for(uint256 i = 20; i < 25; i++) {
+            assertEq(token.balanceOf(addresses[i]), 0);
+        }
+
+        // Distribute remaining (should process only 5)
+        distributor.distributeToAll(poolId, 20);
+        
+        // Verify all 25 now have tokens
+        for(uint256 i = 0; i < 25; i++) {
+            assertEq(token.balanceOf(addresses[i]), 1e18);
+        }
     }
 } 

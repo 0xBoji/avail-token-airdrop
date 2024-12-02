@@ -111,6 +111,7 @@ contract TokenDistributor is Ownable {
        require(pool.poolType == PoolType.AUTO_TRANSFER, "Not an auto-transfer pool");
        require(pool.isTokenAdded, "Token not added yet");
        require(!pool.isDistributed, "Already distributed");
+       require(batchSize > 0, "Batch size must be greater than 0");
 
        IERC20 token = IERC20(pool.token);
        uint256 participantsLength = pool.participants.length;
@@ -125,14 +126,22 @@ contract TokenDistributor is Ownable {
            endIndex = participantsLength;
        }
 
+       // Limit batch size to prevent excessive gas usage
+       require(endIndex - startIndex <= 100, "Batch size too large");
+
        // Prepare arrays for batch transfer
        address[] memory recipients = new address[](endIndex - startIndex);
        uint256[] memory amounts = new uint256[](endIndex - startIndex);
        
+       uint256 batchTotal = 0;
        for(uint256 i = startIndex; i < endIndex; i++) {
            recipients[i - startIndex] = pool.participants[i];
            amounts[i - startIndex] = pool.distributionAmount[pool.participants[i]];
+           batchTotal += amounts[i - startIndex];
        }
+
+       // Verify contract has enough tokens for this batch
+       require(token.balanceOf(address(this)) >= batchTotal, "Insufficient token balance");
 
        // Perform batch transfer
        _batchTransfer(token, recipients, amounts, poolId);
