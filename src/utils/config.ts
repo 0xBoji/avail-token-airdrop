@@ -10,7 +10,7 @@ import {
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '29d61c7872beb6491c27c16145d941b9'
 
 export const rainbowConfig = getDefaultConfig({
-  appName: "AVAIL Token Distribution",
+  appName: "GFI Airdrop",
   projectId: projectId,
   chains: [arbitrumSepolia],
   transports: {

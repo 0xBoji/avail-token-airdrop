@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import TokenDistributorABI from '../abi/TokenDistributor.json';
@@ -23,8 +23,10 @@ interface AddressAmount {
 
 const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0xafc80bf84f62A7ae5926Cb8949B373f663153d66';
 const AVAIL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_AVAIL_TOKEN_ADDRESS || '0x421eEeF4f73c23B976a8AA82b5DD74999260adAc';
+const ADMIN_ADDRESS = '0x0ce46bb78c522C4C007562269262224131990530';
 
 export default function Home() {
+  const [isAdmin, setIsAdmin] = useState(false);
   const [account, setAccount] = useState('');
   const [poolId, setPoolId] = useState('');
   const [poolType, setPoolType] = useState('auto'); // 'auto' or 'claim'
@@ -40,20 +42,123 @@ export default function Home() {
   const [isTokenAdded, setIsTokenAdded] = useState(false);
   const [selectedPoolId, setSelectedPoolId] = useState<string>('');
 
-  // Connect wallet
-  async function connectWallet() {
-    if (typeof window.ethereum !== 'undefined') {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        setAccount(accounts[0]);
-      } catch (error) {
-        console.error('Error connecting wallet:', error);
+  useEffect(() => {
+    const checkAccount = async () => {
+      if (typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          const currentAccount = accounts[0]?.toLowerCase();
+          setAccount(currentAccount);
+          setIsAdmin(currentAccount === ADMIN_ADDRESS.toLowerCase());
+        } catch (error) {
+          console.error('Error checking account:', error);
+        }
       }
-    }
-  }
+    };
 
-  // Create Pool
-  async function createPool() {
+    checkAccount();
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      const currentAccount = accounts[0]?.toLowerCase();
+      setAccount(currentAccount);
+      setIsAdmin(currentAccount === ADMIN_ADDRESS.toLowerCase());
+    };
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      }
+    };
+  }, []);
+
+  const handleExcelUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = event.target?.result;
+        if (!data) {
+          throw new Error('No data read from file');
+        }
+
+        // Set a reasonable size limit (e.g., 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error('File is too large. Please use a file smaller than 5MB');
+        }
+
+        const workbook = XLSX.read(data, { 
+          type: 'binary',
+          cellDates: true,
+          cellNF: false,
+          cellText: false
+        });
+
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Get raw data without headers
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          raw: true,
+          defval: ''
+        });
+        
+        // Process data directly from columns A and B
+        const formattedData = jsonData
+          .filter((row: any) => row[0] && row[1]) // Only take rows with both columns filled
+          .map((row: any) => ({
+            address: String(row[0]).trim(),
+            amount: String(row[1]).trim()
+          }));
+
+        if (formattedData.length === 0) {
+          throw new Error('No valid data found in Excel file');
+        }
+
+        // Clear memory
+        reader.onload = null;
+        setAddressAmounts(formattedData);
+        alert('Excel file imported successfully!');
+      } catch (error) {
+        console.error('Error parsing Excel file:', error);
+        alert(`Error parsing Excel file: ${(error as Error).message}`);
+      }
+    };
+
+    reader.onerror = () => {
+      alert('Error reading file');
+      reader.abort();
+    };
+
+    try {
+      reader.readAsBinaryString(file);
+    } catch (error) {
+      console.error('Error starting file read:', error);
+      alert('Error reading file');
+    }
+  }, []);
+
+  const handleEditSave = useCallback((index: number) => {
+    if (editAddress && editAmount) {
+      const newAddressAmounts = [...addressAmounts];
+      newAddressAmounts[index] = {
+        address: editAddress,
+        amount: editAmount
+      };
+      setAddressAmounts(newAddressAmounts);
+      setEditingIndex(null);
+      setEditAddress('');
+      setEditAmount('');
+    }
+  }, [editAddress, editAmount, addressAmounts]);
+
+  const createPool = useCallback(async () => {
     try {
       if (!DISTRIBUTOR_ADDRESS) {
         throw new Error('Please configure NEXT_PUBLIC_DISTRIBUTOR_ADDRESS in your environment variables');
@@ -93,10 +198,9 @@ export default function Home() {
       // You might want to show this error to the user
       alert('Failed to create pool: ' + (error as Error).message);
     }
-  }
+  }, [poolName, poolType]);
 
-  // Add Addresses
-  async function addAddresses() {
+  const addAddresses = useCallback(async () => {
     try {
       if (!DISTRIBUTOR_ADDRESS) {
         throw new Error('Distributor contract address not configured');
@@ -159,10 +263,9 @@ export default function Home() {
       console.error('Error adding addresses:', error);
       alert('Failed to add addresses: ' + (error as Error).message);
     }
-  }
+  }, [selectedPoolId, addressAmounts]);
 
-  // Add Token to Pool
-  async function addTokenToPool(amount: string) {
+  const addTokenToPool = useCallback(async (amount: string) => {
     try {
       if (!DISTRIBUTOR_ADDRESS || !AVAIL_TOKEN_ADDRESS) {
         throw new Error('Contract addresses not configured');
@@ -265,10 +368,9 @@ export default function Home() {
         alert('Failed to add token: ' + (error.message || error.reason || 'Unknown error'));
       }
     }
-  }
+  }, [poolId]);
 
-  // Distribute or Claim
-  async function handleDistribution() {
+  const handleDistribution = useCallback(async () => {
     try {
       if (!DISTRIBUTOR_ADDRESS) {
         throw new Error('Distributor contract address not configured');
@@ -327,105 +429,103 @@ export default function Home() {
         alert('Failed to distribute tokens: ' + (error.message || 'Unknown error'));
       }
     }
+  }, [poolId, poolType]);
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-gray-50 to-white">
+        <div className="w-full max-w-md mx-auto">
+          <div className="text-center space-y-8 p-8">
+            {/* Logo and Title */}
+            <div className="space-y-4">
+              <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+                GFI Airdrop
+              </h1>
+              <p className="text-lg text-gray-600">
+                Admin Dashboard
+              </p>
+            </div>
+
+            {/* Connection Card */}
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 space-y-6">
+              <div className="flex flex-col items-center gap-4">
+                <div className="p-3 bg-gray-50 rounded-full">
+                  <svg 
+                    className="w-8 h-8 text-gray-600" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={1.5} 
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8V7m-6 4h4" 
+                    />
+                  </svg>
+                </div>
+                <div className="text-center space-y-2">
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Admin Access Required
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Please connect with the admin wallet to continue
+                  </p>
+                </div>
+              </div>
+
+              {/* Connect Button */}
+              <div className="flex justify-center">
+                <ConnectButton />
+              </div>
+
+              {/* Error Message */}
+              {account && account !== ADMIN_ADDRESS.toLowerCase() && (
+                <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-100">
+                  <div className="flex items-center gap-3">
+                    <svg 
+                      className="w-5 h-5 text-red-500" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                      />
+                    </svg>
+                    <p className="text-sm text-red-600">
+                      Please connect with the admin wallet address
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Admin Address Display */}
+            <div className="text-sm text-gray-500">
+              Admin Address: 
+              <span className="font-mono ml-2 text-gray-600">
+                {ADMIN_ADDRESS}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const handleExcelUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = event.target?.result;
-        if (!data) {
-          throw new Error('No data read from file');
-        }
-
-        // Set a reasonable size limit (e.g., 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-          throw new Error('File is too large. Please use a file smaller than 5MB');
-        }
-
-        const workbook = XLSX.read(data, { 
-          type: 'binary',
-          cellDates: true,
-          cellNF: false,
-          cellText: false
-        });
-
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // Get raw data without headers
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-          header: 1,
-          raw: true,
-          defval: ''
-        });
-        
-        // Process data directly from columns A and B
-        const formattedData = jsonData
-          .filter((row: any) => row[0] && row[1]) // Only take rows with both columns filled
-          .map((row: any) => ({
-            address: String(row[0]).trim(),
-            amount: String(row[1]).trim()
-          }));
-
-        if (formattedData.length === 0) {
-          throw new Error('No valid data found in Excel file');
-        }
-
-        // Clear memory
-        reader.onload = null;
-        setAddressAmounts(formattedData);
-        alert('Excel file imported successfully!');
-      } catch (error) {
-        console.error('Error parsing Excel file:', error);
-        alert(`Error parsing Excel file: ${(error as Error).message}`);
-      }
-    };
-
-    reader.onerror = () => {
-      alert('Error reading file');
-      reader.abort();
-    };
-
-    try {
-      reader.readAsBinaryString(file);
-    } catch (error) {
-      console.error('Error starting file read:', error);
-      alert('Error reading file');
-    }
-  }, []);
-
-  const handleEditSave = (index: number) => {
-    if (editAddress && editAmount) {
-      const newAddressAmounts = [...addressAmounts];
-      newAddressAmounts[index] = {
-        address: editAddress,
-        amount: editAmount
-      };
-      setAddressAmounts(newAddressAmounts);
-      setEditingIndex(null);
-      setEditAddress('');
-      setEditAmount('');
-    }
-  };
-
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-pink-300 via-purple-300 to-indigo-400">
+    <div className="min-h-screen flex flex-col bg-white">
       {/* Header */}
-      <header className="glass-container sticky top-0 z-50">
+      <header className="border-b border-gray-200 sticky top-0 z-50 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
-              <img 
-                src="/images/avail.png" 
-                alt="AVAIL Logo" 
-                className="h-8 w-8 rounded-full"
-              />
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">
-                AVAIL Token Distribution
+              <h1 className="text-2xl font-bold text-black">
+                GFI Airdrop
               </h1>
             </div>
             <ConnectButton />
@@ -437,10 +537,10 @@ export default function Home() {
       <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid gap-6">
           {/* Create Pool Card */}
-          <div className="float-card glass-container rounded-xl p-6 hover:shadow-lg transition-all">
+          <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-white">
             <div className="flex items-center space-x-2 mb-6">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
@@ -482,7 +582,7 @@ export default function Home() {
           </div>
 
           {/* Add Addresses Card */}
-          <div className="float-card glass-container rounded-xl p-6 hover:shadow-lg transition-all">
+          <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-white">
             <div className="flex items-center space-x-2 mb-6">
               <div className="p-2 bg-green-100 rounded-lg">
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -695,10 +795,10 @@ export default function Home() {
 
           {/* Distribution/Claim Card */}
           {poolType === 'auto' && (
-            <div className="float-card glass-container rounded-xl p-6 hover:shadow-lg transition-all">
+            <div className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-white">
               <div className="flex items-center space-x-2 mb-6">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 11V9a2 2 0 00-2-2m2 4v4a2 2 0 104 0v-1m-4-3H9m2 0h4m6 1a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
@@ -732,16 +832,11 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="glass-container mt-auto py-6">
+      <footer className="border-t border-gray-200 mt-auto py-6 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center space-x-2">
-              <img 
-                src="/images/avail.png" 
-                alt="AVAIL Logo" 
-                className="h-6 w-6 rounded-full"
-              />
-              <span className="text-gray-600">AVAIL Token Distribution</span>
+              <span className="text-gray-600">GFI Airdrop</span>
             </div>
             
             <div className="flex items-center space-x-4">
@@ -768,7 +863,7 @@ export default function Home() {
             </div>
 
             <div className="text-sm text-gray-500">
-              © {new Date().getFullYear()} AVAIL Token Distribution. All rights reserved.
+              © {new Date().getFullYear()} GFI Airdrop. All rights reserved.
             </div>
           </div>
         </div>
