@@ -4,7 +4,7 @@ import { ethers } from 'ethers'
 import TokenDistributorABI from '../abi/TokenDistributor.json'
 
 const AVAIL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_AVAIL_TOKEN_ADDRESS || '0x421eEeF4f73c23B976a8AA82b5DD74999260adAc';
-const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0x7d9541d31a343e2B5A711D260C19D353D73dB0Ed';
+const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0xdc11F523C329a2ca31247a266526e05354186934';
 const RPC_URL = 'https://sepolia-rollup.arbitrum.io/rpc';
 
 interface AddTokenModalProps {

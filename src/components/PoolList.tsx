@@ -12,7 +12,7 @@ interface Pool {
   poolType: number;
 }
 
-const DISTRIBUTOR_ADDRESS = '0x7d9541d31a343e2B5A711D260C19D353D73dB0Ed';
+const DISTRIBUTOR_ADDRESS = '0xdc11F523C329a2ca31247a266526e05354186934';
 const RPC_URL = 'https://sepolia-rollup.arbitrum.io/rpc';
 
 export default function PoolList() {

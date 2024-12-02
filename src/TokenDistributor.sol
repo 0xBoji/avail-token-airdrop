@@ -23,6 +23,9 @@ contract TokenDistributor is Ownable {
    uint256 public currentPoolId;
    uint256[] private poolIds;
 
+   // Add this state variable to track distribution progress
+   mapping(uint256 => uint256) private distributionProgress;
+
    event PoolCreated(uint256 indexed poolId, string name, PoolType poolType);
    event AddressesAdded(uint256 indexed poolId, uint256 totalAddresses);
    event TokenAddedToPool(uint256 indexed poolId, address token, uint256 amount);
@@ -112,10 +115,12 @@ contract TokenDistributor is Ownable {
        IERC20 token = IERC20(pool.token);
        uint256 participantsLength = pool.participants.length;
        
-       // Calculate the end index for this batch
-       uint256 startIndex = 0;
-       uint256 endIndex = batchSize;
+       // Get the starting index from progress tracking
+       uint256 startIndex = distributionProgress[poolId];
+       require(startIndex < participantsLength, "Distribution already completed");
        
+       // Calculate the end index for this batch
+       uint256 endIndex = startIndex + batchSize;
        if (endIndex > participantsLength) {
            endIndex = participantsLength;
        }
@@ -131,6 +136,9 @@ contract TokenDistributor is Ownable {
 
        // Perform batch transfer
        _batchTransfer(token, recipients, amounts, poolId);
+
+       // Update progress
+       distributionProgress[poolId] = endIndex;
 
        // Mark as distributed if this is the last batch
        if (endIndex == participantsLength) {
@@ -291,5 +299,24 @@ contract TokenDistributor is Ownable {
        }
        
        return (tokens, totalAmounts, names, areTokensAdded, areDistributed, poolTypes);
+   }
+
+   // Add this function to help debug
+   function debugDistribute(uint256 poolId, uint256) external view returns (
+       bool[] memory checks,
+       uint256[] memory values
+   ) {
+       Pool storage pool = pools[poolId];
+       
+       checks = new bool[](3);
+       checks[0] = pool.poolType == PoolType.AUTO_TRANSFER;  // isAutoTransfer
+       checks[1] = pool.isTokenAdded;                        // isTokenAdded
+       checks[2] = !pool.isDistributed;                      // isNotDistributed
+       
+       values = new uint256[](2);
+       values[0] = pool.participants.length;                 // participantsLength
+       values[1] = distributionProgress[poolId];             // startIndex
+       
+       return (checks, values);
    }
 }

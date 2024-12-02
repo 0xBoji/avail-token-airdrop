@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import TokenDistributorABI from '../abi/TokenDistributor.json';
 import AvailTokenABI from '../abi/AvailToken.json';
 import * as XLSX from 'xlsx';
 import dynamic from 'next/dynamic';
+import { toast } from 'react-hot-toast';
 
 const AddTokenModal = dynamic(() => import('../components/AddTokenModal'), {
   loading: () => <p>Loading...</p>
@@ -21,9 +22,125 @@ interface AddressAmount {
   amount: string;
 }
 
-const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0x7d9541d31a343e2B5A711D260C19D353D73dB0Ed';
+const DISTRIBUTOR_ADDRESS = process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS || '0xdc11F523C329a2ca31247a266526e05354186934';
 const AVAIL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_AVAIL_TOKEN_ADDRESS || '0x421eEeF4f73c23B976a8AA82b5DD74999260adAc';
 const ADMIN_ADDRESS = '0x0ce46bb78c522C4C007562269262224131990530';
+const EXPLORER_URL = 'https://sepolia.arbiscan.io/tx/';
+
+const setupEventListeners = (contract: ethers.Contract) => {
+  contract.on("PoolCreated", (poolId, name, poolType, event) => {
+    toast.success(
+      <div>
+        <p>Pool "{name}" created successfully with ID: {poolId.toString()}</p>
+        <a 
+          href={`${EXPLORER_URL}${event.transactionHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-500 underline"
+        >
+          View on Explorer
+        </a>
+      </div>
+    );
+    console.log("Pool Created Event:", { 
+      poolId: poolId.toString(), 
+      name, 
+      poolType: poolType.toString(), 
+      event 
+    });
+  });
+
+  contract.on("AddressesAdded", (poolId, totalAddresses, event) => {
+    toast.success(
+      <div>
+        <p>Added {totalAddresses.toString()} addresses to pool {poolId.toString()}</p>
+        <a 
+          href={`${EXPLORER_URL}${event.transactionHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-500 underline"
+        >
+          View on Explorer
+        </a>
+      </div>
+    );
+    console.log("Addresses Added Event:", { 
+      poolId: poolId.toString(), 
+      totalAddresses: totalAddresses.toString(), 
+      event 
+    });
+  });
+
+  contract.on("TokenAddedToPool", (poolId, token, amount, event) => {
+    const formattedAmount = ethers.utils.formatEther(amount);
+    toast.success(
+      <div>
+        <p>Added {formattedAmount} tokens to pool {poolId.toString()}</p>
+        <a 
+          href={`${EXPLORER_URL}${event.transactionHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-500 underline"
+        >
+          View on Explorer
+        </a>
+      </div>
+    );
+    console.log("Token Added Event:", { 
+      poolId: poolId.toString(), 
+      token, 
+      amount: formattedAmount, 
+      event 
+    });
+  });
+
+  contract.on("TokensDistributed", (poolId, event) => {
+    toast.success(
+      <div>
+        <p>Tokens distributed successfully for pool {poolId.toString()}</p>
+        <a 
+          href={`${EXPLORER_URL}${event.transactionHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-500 underline"
+        >
+          View on Explorer
+        </a>
+      </div>
+    );
+    console.log("Tokens Distributed Event:", { 
+      poolId: poolId.toString(), 
+      event 
+    });
+  });
+
+  contract.on("TokenClaimed", (poolId, user, amount, event) => {
+    const formattedAmount = ethers.utils.formatEther(amount);
+    toast.success(
+      <div>
+        <p>{formattedAmount} tokens claimed from pool {poolId.toString()}</p>
+        <a 
+          href={`${EXPLORER_URL}${event.transactionHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 hover:text-blue-500 underline"
+        >
+          View on Explorer
+        </a>
+      </div>
+    );
+    console.log("Token Claimed Event:", { 
+      poolId: poolId.toString(), 
+      user, 
+      amount: formattedAmount, 
+      event 
+    });
+  });
+
+  return () => {
+    contract.removeAllListeners();
+  };
+};
 
 export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -41,6 +158,8 @@ export default function Home() {
   const [isAddTokenModalOpen, setIsAddTokenModalOpen] = useState(false);
   const [isTokenAdded, setIsTokenAdded] = useState(false);
   const [selectedPoolId, setSelectedPoolId] = useState<string>('');
+
+  const contractRef = useRef<ethers.Contract | null>(null);
 
   useEffect(() => {
     const checkAccount = async () => {
@@ -73,6 +192,25 @@ export default function Home() {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window.ethereum !== 'undefined' && DISTRIBUTOR_ADDRESS) {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const contract = new ethers.Contract(
+        DISTRIBUTOR_ADDRESS,
+        TokenDistributorABI,
+        provider
+      );
+      
+      contractRef.current = contract;
+      const cleanup = setupEventListeners(contract);
+
+      return () => {
+        cleanup();
+        contractRef.current = null;
+      };
+    }
   }, []);
 
   const handleExcelUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,8 +333,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error creating pool:', error);
-      // You might want to show this error to the user
-      alert('Failed to create pool: ' + (error as Error).message);
+      toast.error(`Failed to create pool: ${error.message || 'Unknown error'}`);
     }
   }, [poolName, poolType]);
 
@@ -251,7 +388,8 @@ export default function Home() {
       const amountsBN = amountList.map(amount => ethers.BigNumber.from(amount));
 
       const tx = await contract.addAddressesToPool(selectedPoolId, addressList, amountsBN);
-      console.log('Transaction sent:', tx.hash);
+      toast.loading('Adding addresses...', { id: tx.hash });
+      
       await tx.wait();
       console.log('Addresses added successfully');
 
@@ -261,7 +399,7 @@ export default function Home() {
       setEditAmount('');
     } catch (error) {
       console.error('Error adding addresses:', error);
-      alert('Failed to add addresses: ' + (error as Error).message);
+      toast.error(`Failed to add addresses: ${error.message || 'Unknown error'}`);
     }
   }, [selectedPoolId, addressAmounts]);
 
@@ -275,11 +413,6 @@ export default function Home() {
       const signer = provider.getSigner();
       const userAddress = await signer.getAddress();
 
-      console.log('User address:', userAddress);
-      console.log('Token address:', AVAIL_TOKEN_ADDRESS);
-      console.log('Distributor address:', DISTRIBUTOR_ADDRESS);
-      console.log('Pool ID:', poolId);
-
       // First check if addresses have been added to the pool
       const distributorContract = new ethers.Contract(
         DISTRIBUTOR_ADDRESS,
@@ -287,12 +420,16 @@ export default function Home() {
         signer
       );
 
-      // Get pool info
+      // Get pool info and validate
       const poolInfo = await distributorContract.getPoolInfo(poolId);
       console.log('Pool info:', poolInfo);
 
-      if (poolInfo.totalAmount.eq(0)) {
+      if (!poolInfo || poolInfo.totalAmount.eq(0)) {
         throw new Error('Please add addresses to the pool first');
+      }
+
+      if (poolInfo.isTokenAdded) {
+        throw new Error('Token has already been added to this pool');
       }
 
       const requiredAmount = poolInfo.totalAmount;
@@ -302,7 +439,7 @@ export default function Home() {
       const amountInWei = ethers.utils.parseEther(amount);
       console.log('Amount to add (in wei):', amountInWei.toString());
 
-      // Check if amount is sufficient
+      // Validate amount
       if (amountInWei.lt(requiredAmount)) {
         throw new Error(`Insufficient amount. Required: ${ethers.utils.formatEther(requiredAmount)} AVAIL`);
       }
@@ -329,7 +466,11 @@ export default function Home() {
       console.log('Approving tokens...');
       const approveTx = await tokenContract.approve(DISTRIBUTOR_ADDRESS, amountInWei);
       console.log('Approval transaction sent:', approveTx.hash);
-      await approveTx.wait();
+      const approvalReceipt = await approveTx.wait();
+      
+      if (approvalReceipt.status === 0) {
+        throw new Error('Token approval failed');
+      }
       console.log('Tokens approved');
 
       // Verify allowance after approval
@@ -343,30 +484,78 @@ export default function Home() {
       // Add a small delay after approval
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Then add token to pool
+      // Debug the contract state before adding token
+      try {
+        const debug = await distributorContract.debugDistribute(poolId, 0);
+        console.log('Debug info:', debug);
+      } catch (error) {
+        console.log('Debug info not available:', error);
+      }
+
+      // Then add token to pool with increased gas limit
       console.log('Adding token to pool...');
-      const tx = await distributorContract.addTokenToPool(
+      console.log('Parameters:', {
+        poolId: poolId.toString(),
+        token: AVAIL_TOKEN_ADDRESS,
+        amount: amountInWei.toString()
+      });
+
+      const addTokenTx = await distributorContract.addTokenToPool(
         poolId, 
         AVAIL_TOKEN_ADDRESS, 
         amountInWei,
         {
-          gasLimit: 5000000000000 // Increased gas limit
+          gasLimit: 500000
         }
       );
-      console.log('Transaction sent:', tx.hash);
-      const receipt = await tx.wait();
+      
+      toast.loading(
+        <div>
+          <p>Adding token to pool...</p>
+          <a 
+            href={`${EXPLORER_URL}${addTokenTx.hash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-500 underline"
+          >
+            View on Explorer
+          </a>
+        </div>,
+        { id: addTokenTx.hash }
+      );
+      
+      await addTokenTx.wait();
+      
+      // Verify the token was actually added
+      const updatedPoolInfo = await distributorContract.getPoolInfo(poolId);
+      if (!updatedPoolInfo.isTokenAdded) {
+        throw new Error('Token addition failed - Pool state not updated');
+      }
+
       console.log('Token added to pool successfully, receipt:', receipt);
       
       setIsTokenAdded(true);
       setIsAddTokenModalOpen(false);
     } catch (error: any) {
       console.error('Error adding token to pool:', error);
-      // Show more detailed error message
-      if (error.data?.message) {
-        alert('Contract error: ' + error.data.message);
-      } else {
-        alert('Failed to add token: ' + (error.message || error.reason || 'Unknown error'));
-      }
+      const errorMessage = error.message || 'Unknown error';
+      const txHash = error.transaction?.hash;
+      
+      toast.error(
+        <div>
+          <p>Failed to add token: {errorMessage}</p>
+          {txHash && (
+            <a 
+              href={`${EXPLORER_URL}${txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-500 underline"
+            >
+              View on Explorer
+            </a>
+          )}
+        </div>
+      );
     }
   }, [poolId]);
 
@@ -404,8 +593,9 @@ export default function Home() {
           poolId,
           batchSize // Add batch size
         );
-        console.log('Distribution transaction sent:', tx.hash);
-        const receipt = await tx.wait();
+        toast.loading('Distributing tokens...', { id: tx.hash });
+        
+        await tx.wait();
         console.log('Distribution successful:', receipt);
         alert('Tokens distributed successfully!');
       } else {
@@ -418,15 +608,7 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('Error with distribution:', error);
-      if (error.data?.message) {
-        alert('Distribution failed: ' + error.data.message);
-      } else if (error.message.includes('Token not added')) {
-        alert('Please add token to the pool before distributing');
-      } else if (error.message.includes('Already distributed')) {
-        alert('Tokens have already been distributed for this pool');
-      } else {
-        alert('Failed to distribute tokens: ' + (error.message || 'Unknown error'));
-      }
+      toast.error(`Distribution failed: ${error.message || 'Unknown error'}`);
     }
   }, [poolId, poolType]);
 

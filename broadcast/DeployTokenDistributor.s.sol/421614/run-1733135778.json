@@ -4,7 +4,7 @@
       "hash": "0xd94bb45492772f2da9b65cb773efab3c77ebc4cf9b24c880c3320ea9d75b7fb3",
       "transactionType": "CREATE",
       "contractName": "TokenDistributor",
-      "contractAddress": "0x7d9541d31a343e2b5a711d260c19d353d73db0ed",
+      "contractAddress": "0xdc11F523C329a2ca31247a266526e05354186934",
       "function": null,
       "arguments": null,
       "transaction": {
@@ -25,7 +25,7 @@
       "cumulativeGasUsed": "0x1bd50f",
       "logs": [
         {
-          "address": "0x7d9541d31a343e2b5a711d260c19d353d73db0ed",
+          "address": "0xdc11F523C329a2ca31247a266526e05354186934",
           "topics": [
             "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
             "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -50,7 +50,7 @@
       "effectiveGasPrice": "0x5f5e100",
       "from": "0x0ce46bb78c522c4c007562269262224131990530",
       "to": null,
-      "contractAddress": "0x7d9541d31a343e2b5a711d260c19d353d73db0ed",
+      "contractAddress": "0xdc11F523C329a2ca31247a266526e05354186934",
       "gasUsedForL1": "0xa6c0",
       "l1BlockNumber": "0x6dcb74"
     }
